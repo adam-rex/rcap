@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import type { RexDashboardStats } from "@/lib/rex/voice";
 import {
   rexEmptyContacts,
@@ -52,17 +52,70 @@ function RexStubPanel({ title }: { title: string }) {
 
 export function ChatShell({ openingGreeting, stats }: ChatShellProps) {
   const [activeNav, setActiveNav] = useState<ChatNavId>("ask");
+  const [messages, setMessages] = useState<ChatMessage[]>(() => [
+    { id: "rex-open", role: "rex", text: openingGreeting },
+  ]);
+  const [searchBusy, setSearchBusy] = useState(false);
 
-  const initialMessages = useMemo<ChatMessage[]>(
-    () => [
-      {
-        id: "rex-open",
-        role: "rex",
-        text: openingGreeting,
-      },
-    ],
-    [openingGreeting],
-  );
+  const onSubmitSearch = useCallback(async (query: string) => {
+    const userId =
+      typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `user-${Date.now()}`;
+    setMessages((prev) => [
+      ...prev,
+      { id: userId, role: "user", text: query },
+    ]);
+    setSearchBusy(true);
+    try {
+      const res = await fetch("/api/rex/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query }),
+      });
+      const data = (await res.json()) as { text?: string; error?: string };
+      const rexId =
+        typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `rex-${Date.now()}`;
+      if (!res.ok) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: rexId,
+            role: "rex",
+            text:
+              data.error ??
+              "That search didn’t go through. Check the API key and try again.",
+          },
+        ]);
+        return;
+      }
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: rexId,
+          role: "rex",
+          text: data.text ?? "No text came back — odd.",
+        },
+      ]);
+    } catch {
+      const rexId =
+        typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `rex-${Date.now()}`;
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: rexId,
+          role: "rex",
+          text: "Network hiccup. Try again in a moment.",
+        },
+      ]);
+    } finally {
+      setSearchBusy(false);
+    }
+  }, []);
 
   return (
     <div className="flex min-h-[100dvh] flex-1 bg-cream">
@@ -92,8 +145,11 @@ export function ChatShell({ openingGreeting, stats }: ChatShellProps) {
         <main className="flex min-h-0 flex-1 flex-col">
           {activeNav === "ask" ? (
             <>
-              <ChatMessageList messages={initialMessages} />
-              <ChatComposer />
+              <ChatMessageList messages={messages} />
+              <ChatComposer
+                onSubmitSearch={onSubmitSearch}
+                isBusy={searchBusy}
+              />
             </>
           ) : activeNav === "contacts" ? (
             stats.contactCount === 0 ? (
