@@ -11,6 +11,12 @@ export async function getRexDashboardStats(): Promise<RexDashboardStats> {
   const userScoped = await createServerSupabaseClient();
   const client = service ?? userScoped;
 
+  if (process.env.NODE_ENV === "development" && !service) {
+    console.warn(
+      "[rex-robson] Supabase: no service role key. Server reads use the anon key; RLS only allows the authenticated role, so counts stay at 0 until you sign in or set SUPABASE_SERVICE_ROLE_KEY in .env.local (restart dev server).",
+    );
+  }
+
   try {
     const contactsReq = client
       .from("contacts")
@@ -61,7 +67,10 @@ export async function getRexDashboardStats(): Promise<RexDashboardStats> {
       suggestionsPendingCount: suggestionsPendingCount ?? 0,
       suggestionTotalCount: suggestionTotalCount ?? 0,
     };
-  } catch {
+  } catch (err) {
+    if (process.env.NODE_ENV === "development") {
+      console.error("[rex-robson] getRexDashboardStats failed:", err);
+    }
     return {
       contactCount: 0,
       organisationCount: 0,
