@@ -1,26 +1,5 @@
+import { ChatShell } from "@/components/chat";
+
 export default function Home() {
-  return (
-    <div className="flex flex-1 flex-col items-center justify-center px-6 py-16">
-      <div className="flex max-w-lg flex-col items-center gap-8 text-center">
-        <div
-          className="flex h-16 w-16 items-center justify-center rounded-card bg-charcoal font-serif text-4xl leading-none tracking-tight text-cream select-none"
-          aria-hidden
-        >
-          R
-        </div>
-        <div className="space-y-3">
-          <h1 className="font-serif text-4xl tracking-tight text-charcoal sm:text-5xl">
-            REX
-          </h1>
-          <p className="text-lg text-charcoal-light">
-            Add this app to your home screen for a full-screen experience. Built
-            with Next.js and Tailwind CSS v4.
-          </p>
-        </div>
-        <p className="rounded-pill border border-charcoal/10 bg-cream-light px-4 py-2 text-sm text-charcoal-light">
-          On iPhone: Share → Add to Home Screen
-        </p>
-      </div>
-    </div>
-  );
+  return <ChatShell />;
 }
