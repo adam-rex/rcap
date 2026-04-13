@@ -1,7 +1,7 @@
 "use client";
 
 import { Plus } from "lucide-react";
-import type { FormEvent } from "react";
+import type { DragEvent, FormEvent } from "react";
 import { useCallback, useEffect, useState } from "react";
 import {
   WORKSPACE_DEALS_PAGE_SIZE_DEFAULT,
@@ -72,6 +72,8 @@ export function DealsBrowsePanel() {
   const [newNotes, setNewNotes] = useState("");
   const [stageMoveBusyId, setStageMoveBusyId] = useState<string | null>(null);
   const [stageHistory, setStageHistory] = useState<StageHistoryRow[]>([]);
+  const [draggingDealId, setDraggingDealId] = useState<string | null>(null);
+  const [dropStage, setDropStage] = useState<DealStage | null>(null);
 
   useEffect(() => {
     const t = window.setTimeout(() => setDebouncedQuery(queryInput.trim()), 320);
@@ -262,6 +264,8 @@ export function DealsBrowsePanel() {
   };
 
   const moveStage = async (dealId: string, toStage: DealStage) => {
+    const source = rows.find((r) => r.id === dealId);
+    if (source?.deal_stage === toStage) return;
     setStageMoveBusyId(dealId);
     setError(null);
     try {
@@ -284,6 +288,44 @@ export function DealsBrowsePanel() {
     } finally {
       setStageMoveBusyId(null);
     }
+  };
+
+  const onCardDragStart = (
+    e: DragEvent<HTMLDivElement>,
+    dealId: string,
+  ) => {
+    e.dataTransfer.setData("text/plain", dealId);
+    e.dataTransfer.effectAllowed = "move";
+    setDraggingDealId(dealId);
+  };
+
+  const onCardDragEnd = () => {
+    setDraggingDealId(null);
+    setDropStage(null);
+  };
+
+  const onColumnDragOver = (e: DragEvent<HTMLElement>, stage: DealStage) => {
+    if (!draggingDealId) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDropStage(stage);
+  };
+
+  const onColumnDragLeave = (e: DragEvent<HTMLElement>, stage: DealStage) => {
+    if (dropStage !== stage) return;
+    const next = e.relatedTarget;
+    if (next instanceof Node && e.currentTarget.contains(next)) return;
+    setDropStage(null);
+  };
+
+  const onColumnDrop = async (e: DragEvent<HTMLElement>, stage: DealStage) => {
+    e.preventDefault();
+    const dealId = e.dataTransfer.getData("text/plain") || draggingDealId;
+    setDropStage(null);
+    if (!dealId || stageMoveBusyId) return;
+    const source = rows.find((r) => r.id === dealId);
+    if (!source || source.deal_stage === stage) return;
+    await moveStage(dealId, stage);
   };
 
   return (
@@ -339,7 +381,14 @@ export function DealsBrowsePanel() {
             return (
               <section
                 key={stage.id}
-                className="rounded-lg border border-charcoal/8 bg-cream p-2"
+                onDragOver={(e) => onColumnDragOver(e, stage.id)}
+                onDragLeave={(e) => onColumnDragLeave(e, stage.id)}
+                onDrop={(e) => void onColumnDrop(e, stage.id)}
+                className={`rounded-lg border bg-cream p-2 transition-colors ${
+                  dropStage === stage.id
+                    ? "border-charcoal/30 bg-charcoal/[0.04]"
+                    : "border-charcoal/8"
+                }`}
               >
                 <div className="mb-2 flex items-center justify-between border-b border-charcoal/8 px-1 pb-2">
                   <p className="text-xs font-semibold uppercase tracking-wide text-charcoal/80">
@@ -362,7 +411,15 @@ export function DealsBrowsePanel() {
                       const meta = [d.deal_type, d.sector, d.structure].filter(Boolean).join(" · ");
                       const money = fmtMoney(d.size);
                       return (
-                        <div key={d.id} className="rounded-md border border-charcoal/10 bg-cream-light/30 p-3">
+                        <div
+                          key={d.id}
+                          draggable={stageMoveBusyId !== d.id}
+                          onDragStart={(e) => onCardDragStart(e, d.id)}
+                          onDragEnd={onCardDragEnd}
+                          className={`rounded-md border bg-cream-light/30 p-3 ${
+                            draggingDealId === d.id ? "border-charcoal/30 opacity-60" : "border-charcoal/10"
+                          }`}
+                        >
                           <button
                             type="button"
                             onClick={() => void openEdit(d)}
