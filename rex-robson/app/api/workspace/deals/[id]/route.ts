@@ -4,6 +4,8 @@ import { isValidUuid, readJsonObject } from "@/lib/api/workspace-post-parse";
 import {
   fetchWorkspaceDealById,
   getWorkspaceWriteClient,
+  insertDealStageHistory,
+  listDealStageHistory,
   updateWorkspaceDeal,
 } from "@/lib/data/workspace-mutations";
 
@@ -21,15 +23,18 @@ export async function GET(_req: Request, context: RouteContext) {
     if (!row) {
       return NextResponse.json({ error: "Deal not found" }, { status: 404 });
     }
+    const stageHistory = await listDealStageHistory(client, id);
     return NextResponse.json({
       id: row.id,
       title: row.title,
       size: row.size,
       dealType: row.deal_type,
+      dealStage: row.deal_stage,
       sector: row.sector,
       structure: row.structure,
       status: row.status,
       notes: row.notes,
+      stageHistory,
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Query failed";
@@ -57,10 +62,15 @@ export async function PATCH(req: Request, context: RouteContext) {
 
   try {
     const client = await getWorkspaceWriteClient();
+    const existing = await fetchWorkspaceDealById(client, id);
+    if (!existing) {
+      return NextResponse.json({ error: "Deal not found" }, { status: 404 });
+    }
     const row = await updateWorkspaceDeal(client, id, {
       title: fields.value.title,
       size: fields.value.size,
       deal_type: fields.value.dealType,
+      deal_stage: fields.value.dealStage,
       sector: fields.value.sector,
       structure: fields.value.structure,
       status: fields.value.status,
@@ -68,6 +78,13 @@ export async function PATCH(req: Request, context: RouteContext) {
     });
     if (!row) {
       return NextResponse.json({ error: "Deal not found" }, { status: 404 });
+    }
+    if (existing.deal_stage !== row.deal_stage) {
+      await insertDealStageHistory(client, {
+        deal_id: id,
+        from_stage: existing.deal_stage,
+        to_stage: row.deal_stage,
+      });
     }
     return NextResponse.json(row);
   } catch (e) {

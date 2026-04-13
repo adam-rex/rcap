@@ -5,6 +5,7 @@
 truncate table public.rex_email_extractions restart identity;
 truncate table public.rex_inbound_email_attachments restart identity;
 truncate table public.rex_inbound_emails restart identity;
+truncate table public.deal_stage_history restart identity;
 truncate table public.contacts restart identity;
 truncate table public.deals restart identity;
 truncate table public.organisations restart identity;
@@ -75,11 +76,11 @@ insert into public.contacts (
     'event'
   );
 
-insert into public.deals (title, size, deal_type, sector, structure, status, notes) values
-  ('Project Atlas — B2B payments platform', 28000000, 'equity deal', 'fintech', 'Series B preferred', 'diligence', 'Strong unit economics; key risk is enterprise sales cycle length.'),
-  ('Lumen Analytics recapitalization', 120000000, 'senior debt', 'saas', 'majority_recap', 'ioi', 'Sponsor exploring add-on acquisitions in marketing analytics.'),
-  ('Harbor Freight co-invest (secondary)', 45000000, 'debt deal', 'logistics', 'secondary', 'passed', 'Passed on pricing; staying in touch for future stapled secondaries.'),
-  ('Midwest Cold Storage platform', 85000000, 'bridging', 'industrials', 'buyout', 'live', 'Roll-up of regional cold chain assets; environmental capex plan in data room.');
+insert into public.deals (title, size, deal_type, deal_stage, sector, structure, status, notes) values
+  ('Project Atlas — B2B payments platform', 28000000, 'equity deal', 'active', 'fintech', 'Series B preferred', 'diligence', 'Strong unit economics; key risk is enterprise sales cycle length.'),
+  ('Lumen Analytics recapitalization', 120000000, 'senior debt', 'matching', 'saas', 'majority_recap', 'ioi', 'Sponsor exploring add-on acquisitions in marketing analytics.'),
+  ('Harbor Freight co-invest (secondary)', 45000000, 'debt deal', 'prospect', 'logistics', 'secondary', 'passed', 'Passed on pricing; staying in touch for future stapled secondaries.'),
+  ('Midwest Cold Storage platform', 85000000, 'bridging', 'closed', 'industrials', 'buyout', 'live', 'Roll-up of regional cold chain assets; environmental capex plan in data room.');
 
 insert into public.rex_inbound_emails (
   id, received_at, from_name, from_address, to_addresses, subject, body_text, snippet, external_message_id, thread_participant_count

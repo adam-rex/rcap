@@ -30,6 +30,11 @@ import { createServiceSupabase } from "./env";
 const DUMMY = "00000000-0000-0000-0000-000000000000";
 
 async function clearTables(supabase: SupabaseClient): Promise<void> {
+  const { error: eh } = await supabase
+    .from("deal_stage_history")
+    .delete()
+    .neq("id", -1);
+  if (eh) throw eh;
   const { error: e0 } = await supabase.from("rex_tasks").delete().neq("id", DUMMY);
   if (e0) throw e0;
   const { error: e1 } = await supabase

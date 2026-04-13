@@ -9,6 +9,7 @@ import {
 } from "@/lib/data/workspace-deals-page";
 import {
   getWorkspaceWriteClient,
+  insertDealStageHistory,
   insertWorkspaceDeal,
 } from "@/lib/data/workspace-mutations";
 
@@ -29,10 +30,16 @@ export async function POST(req: Request) {
       title: fields.value.title,
       size: fields.value.size,
       deal_type: fields.value.dealType,
+      deal_stage: fields.value.dealStage,
       sector: fields.value.sector,
       structure: fields.value.structure,
       status: fields.value.status,
       notes: fields.value.notes,
+    });
+    await insertDealStageHistory(client, {
+      deal_id: row.id,
+      from_stage: null,
+      to_stage: row.deal_stage,
     });
     return NextResponse.json(row, { status: 201 });
   } catch (e) {
@@ -94,7 +101,7 @@ export async function GET(req: Request) {
       {
         error: message,
         hint:
-          "If this mentions workspace_deals_page, apply the latest Supabase migration (20260413160000_workspace_orgs_deals_page.sql).",
+          "If this mentions workspace_deals_page, apply the latest Supabase migration (20260413230000_deal_stages_and_history.sql).",
       },
       { status: 503 },
     );

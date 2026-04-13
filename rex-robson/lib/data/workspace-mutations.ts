@@ -86,10 +86,28 @@ export type CreatedDealRow = {
   title: string;
   size: number | null;
   deal_type: string | null;
+  deal_stage: "prospect" | "active" | "matching" | "closed";
   sector: string | null;
   structure: string | null;
   status: string | null;
 };
+
+export type DealStage = CreatedDealRow["deal_stage"];
+
+export type DealStageHistoryRow = {
+  id: number;
+  deal_id: string;
+  from_stage: DealStage | null;
+  to_stage: DealStage;
+  changed_by: string | null;
+  changed_at: string;
+};
+
+function parseDealStage(raw: unknown): DealStage {
+  return raw === "active" || raw === "matching" || raw === "closed"
+    ? raw
+    : "prospect";
+}
 
 export async function insertWorkspaceDeal(
   client: SupabaseClient,
@@ -97,6 +115,7 @@ export async function insertWorkspaceDeal(
     title: string;
     size: number | null;
     deal_type: string | null;
+    deal_stage: DealStage;
     sector: string | null;
     structure: string | null;
     status: string | null;
@@ -109,12 +128,13 @@ export async function insertWorkspaceDeal(
       title: input.title,
       size: input.size,
       deal_type: input.deal_type,
+      deal_stage: input.deal_stage,
       sector: input.sector,
       structure: input.structure,
       status: input.status,
       notes: input.notes,
     })
-    .select("id,title,size,deal_type,sector,structure,status")
+    .select("id,title,size,deal_type,deal_stage,sector,structure,status")
     .single();
 
   if (error) throw error;
@@ -134,6 +154,7 @@ export async function insertWorkspaceDeal(
     title: String(data.title ?? ""),
     size,
     deal_type: data.deal_type == null ? null : String(data.deal_type),
+    deal_stage: parseDealStage(data.deal_stage),
     sector: data.sector == null ? null : String(data.sector),
     structure: data.structure == null ? null : String(data.structure),
     status: data.status == null ? null : String(data.status),
@@ -255,7 +276,7 @@ export async function fetchWorkspaceDealById(
 ): Promise<WorkspaceDealDetail | null> {
   const { data, error } = await client
     .from("deals")
-    .select("id,title,size,deal_type,sector,structure,status,notes")
+    .select("id,title,size,deal_type,deal_stage,sector,structure,status,notes")
     .eq("id", id)
     .maybeSingle();
 
@@ -267,6 +288,7 @@ export async function fetchWorkspaceDealById(
     title: String(data.title ?? ""),
     size: parseDealSize(data.size),
     deal_type: data.deal_type == null ? null : String(data.deal_type),
+    deal_stage: parseDealStage(data.deal_stage),
     sector: data.sector == null ? null : String(data.sector),
     structure: data.structure == null ? null : String(data.structure),
     status: data.status == null ? null : String(data.status),
@@ -281,6 +303,7 @@ export async function updateWorkspaceDeal(
     title: string;
     size: number | null;
     deal_type: string | null;
+    deal_stage: DealStage;
     sector: string | null;
     structure: string | null;
     status: string | null;
@@ -293,13 +316,14 @@ export async function updateWorkspaceDeal(
       title: input.title,
       size: input.size,
       deal_type: input.deal_type,
+      deal_stage: input.deal_stage,
       sector: input.sector,
       structure: input.structure,
       status: input.status,
       notes: input.notes,
     })
     .eq("id", id)
-    .select("id,title,size,deal_type,sector,structure,status")
+    .select("id,title,size,deal_type,deal_stage,sector,structure,status")
     .maybeSingle();
 
   if (error) throw error;
@@ -312,10 +336,89 @@ export async function updateWorkspaceDeal(
     title: String(data.title ?? ""),
     size,
     deal_type: data.deal_type == null ? null : String(data.deal_type),
+    deal_stage: parseDealStage(data.deal_stage),
     sector: data.sector == null ? null : String(data.sector),
     structure: data.structure == null ? null : String(data.structure),
     status: data.status == null ? null : String(data.status),
   };
+}
+
+export async function insertDealStageHistory(
+  client: SupabaseClient,
+  input: {
+    deal_id: string;
+    from_stage: DealStage | null;
+    to_stage: DealStage;
+    changed_by?: string | null;
+  },
+): Promise<void> {
+  const { error } = await client.from("deal_stage_history").insert({
+    deal_id: input.deal_id,
+    from_stage: input.from_stage,
+    to_stage: input.to_stage,
+    changed_by: input.changed_by ?? null,
+  });
+  if (error) throw error;
+}
+
+export async function moveWorkspaceDealStage(
+  client: SupabaseClient,
+  input: { id: string; toStage: DealStage; changedBy?: string | null },
+): Promise<CreatedDealRow | null> {
+  const current = await fetchWorkspaceDealById(client, input.id);
+  if (!current) return null;
+  if (current.deal_stage === input.toStage) {
+    return {
+      id: current.id,
+      title: current.title,
+      size: current.size,
+      deal_type: current.deal_type,
+      deal_stage: current.deal_stage,
+      sector: current.sector,
+      structure: current.structure,
+      status: current.status,
+    };
+  }
+  const updated = await updateWorkspaceDeal(client, input.id, {
+    title: current.title,
+    size: current.size,
+    deal_type: current.deal_type,
+    deal_stage: input.toStage,
+    sector: current.sector,
+    structure: current.structure,
+    status: current.status,
+    notes: current.notes,
+  });
+  if (!updated) return null;
+  await insertDealStageHistory(client, {
+    deal_id: input.id,
+    from_stage: current.deal_stage,
+    to_stage: input.toStage,
+    changed_by: input.changedBy ?? null,
+  });
+  return updated;
+}
+
+export async function listDealStageHistory(
+  client: SupabaseClient,
+  dealId: string,
+): Promise<DealStageHistoryRow[]> {
+  const { data, error } = await client
+    .from("deal_stage_history")
+    .select("id,deal_id,from_stage,to_stage,changed_by,changed_at")
+    .eq("deal_id", dealId)
+    .order("changed_at", { ascending: false })
+    .limit(50);
+  if (error) throw error;
+  return (data ?? []).map((row) => ({
+    id: Number(row.id),
+    deal_id: String(row.deal_id),
+    from_stage:
+      row.from_stage == null ? null : parseDealStage(row.from_stage),
+    to_stage: parseDealStage(row.to_stage),
+    changed_by: row.changed_by == null ? null : String(row.changed_by),
+    changed_at: String(row.changed_at ?? ""),
+  }));
 }
 
 /** ISO date (YYYY-MM-DD) from an inbound email timestamp for last_contact_date. */

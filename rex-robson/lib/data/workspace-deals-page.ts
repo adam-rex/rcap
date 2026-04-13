@@ -23,6 +23,12 @@ function parseSize(raw: unknown): number | null {
   return null;
 }
 
+function parseDealStage(raw: unknown): "prospect" | "active" | "matching" | "closed" {
+  return raw === "active" || raw === "matching" || raw === "closed"
+    ? raw
+    : "prospect";
+}
+
 function parseRpcPayload(data: unknown): WorkspaceDealsPageResult {
   if (data == null || typeof data !== "object") {
     return { rows: [], total: 0 };
@@ -37,6 +43,7 @@ function parseRpcPayload(data: unknown): WorkspaceDealsPageResult {
       title: String(x.title ?? ""),
       size: parseSize(x.size),
       deal_type: x.deal_type == null ? null : String(x.deal_type),
+      deal_stage: parseDealStage(x.deal_stage),
       sector: x.sector == null ? null : String(x.sector),
       structure: x.structure == null ? null : String(x.structure),
       status: x.status == null ? null : String(x.status),

@@ -29,6 +29,7 @@ export type Deal = {
   title: string;
   size: number | null;
   deal_type: string | null;
+  deal_stage: "prospect" | "active" | "matching" | "closed";
   sector: string | null;
   structure: string | null;
   status: string | null;

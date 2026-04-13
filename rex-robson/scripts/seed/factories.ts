@@ -80,6 +80,8 @@ const DEAL_TYPES = [
   "bridging",
 ] as const;
 
+const DEAL_STAGES = ["prospect", "active", "matching", "closed"] as const;
+
 function pickMany<T extends readonly string[]>(
   pool: T,
   min: number,
@@ -119,6 +121,7 @@ export type DealRow = {
   title: string;
   size: number;
   deal_type: string;
+  deal_stage: (typeof DEAL_STAGES)[number];
   sector: string;
   structure: string;
   status: string;
@@ -202,6 +205,7 @@ export function createDeals(num: number): DealRow[] {
       title: `${company} — ${theme}`,
       size: faker.number.int({ min: 5, max: 250 }) * 1_000_000,
       deal_type: pickOne(DEAL_TYPES),
+      deal_stage: pickOne(DEAL_STAGES),
       sector: pickOne(SECTORS),
       structure: pickOne(DEAL_STRUCTURES),
       status: pickOne(DEAL_STATUSES),

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { RexEmailExtractionKind } from "@/lib/data/workspace-emails.types";
 import {
+  insertDealStageHistory,
   insertWorkspaceContact,
   insertWorkspaceDeal,
   insertWorkspaceOrganisation,
@@ -244,10 +245,17 @@ export async function applyRexEmailExtraction(
         const deal = await insertWorkspaceDeal(client, {
           title,
           size: optNum(p.size),
+          deal_type: optStr(p.dealType),
+          deal_stage: "prospect",
           sector: optStr(p.sector),
           structure: optStr(p.structure),
           status: optStr(p.status) ?? "live",
           notes: optStr(p.notes),
+        });
+        await insertDealStageHistory(client, {
+          deal_id: deal.id,
+          from_stage: null,
+          to_stage: deal.deal_stage,
         });
         await markApplied(client, params.extractionId, {
           ...empty,
