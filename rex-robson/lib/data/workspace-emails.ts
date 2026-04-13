@@ -4,6 +4,7 @@ import { tryCreateServiceRoleClient } from "@/lib/supabase/service-role";
 import type {
   WorkspaceEmailAttachmentRow,
   WorkspaceEmailDetail,
+  WorkspaceEmailExtractionListItem,
   WorkspaceEmailListRow,
   WorkspaceEmailsPageResult,
 } from "@/lib/data/workspace-emails.types";
@@ -20,7 +21,10 @@ export {
   WORKSPACE_EMAILS_PAGE_SIZE_MAX,
 } from "@/lib/data/workspace-emails.types";
 
-function mapListRow(r: Record<string, unknown>): WorkspaceEmailListRow {
+function mapListRow(
+  r: Record<string, unknown>,
+  pendingReviewCount: number,
+): WorkspaceEmailListRow {
   return {
     id: String(r.id ?? ""),
     fromName: r.from_name == null ? null : String(r.from_name),
@@ -29,6 +33,55 @@ function mapListRow(r: Record<string, unknown>): WorkspaceEmailListRow {
     snippet: r.snippet == null ? null : String(r.snippet),
     receivedAt:
       r.received_at == null ? "" : String(r.received_at),
+    pendingReviewCount,
+  };
+}
+
+function mapExtractionRow(
+  r: Record<string, unknown>,
+): WorkspaceEmailExtractionListItem {
+  const kindRaw = r.kind;
+  const kind =
+    kindRaw === "contact" ||
+    kindRaw === "organisation" ||
+    kindRaw === "deal_signal" ||
+    kindRaw === "intro_request"
+      ? kindRaw
+      : "contact";
+  const statusRaw = r.status;
+  const status =
+    statusRaw === "pending" ||
+    statusRaw === "applied" ||
+    statusRaw === "dismissed"
+      ? statusRaw
+      : "pending";
+  const payloadRaw = r.payload;
+  const payload =
+    payloadRaw != null &&
+    typeof payloadRaw === "object" &&
+    !Array.isArray(payloadRaw)
+      ? (payloadRaw as Record<string, unknown>)
+      : {};
+  return {
+    id: String(r.id ?? ""),
+    kind,
+    status,
+    title: String(r.title ?? ""),
+    summary: r.summary == null ? null : String(r.summary),
+    detail: r.detail == null ? null : String(r.detail),
+    payload,
+    createdContactId:
+      r.created_contact_id == null ? null : String(r.created_contact_id),
+    createdOrganisationId:
+      r.created_organisation_id == null
+        ? null
+        : String(r.created_organisation_id),
+    createdDealId:
+      r.created_deal_id == null ? null : String(r.created_deal_id),
+    createdSuggestionId:
+      r.created_suggestion_id == null
+        ? null
+        : String(r.created_suggestion_id),
   };
 }
 
@@ -85,9 +138,28 @@ export async function fetchWorkspaceEmailsPageWithClient(
   if (error) throw error;
 
   const rowsRaw = Array.isArray(data) ? data : [];
-  const rows: WorkspaceEmailListRow[] = rowsRaw.map((r) =>
-    mapListRow(r as Record<string, unknown>),
-  );
+  const ids = rowsRaw.map((r) => String((r as Record<string, unknown>).id ?? ""));
+  const pendingByEmail = new Map<string, number>();
+  if (ids.length > 0) {
+    const { data: pendRows, error: pendErr } = await client
+      .from("rex_email_extractions")
+      .select("email_id")
+      .eq("status", "pending")
+      .in("email_id", ids);
+    if (!pendErr && Array.isArray(pendRows)) {
+      for (const p of pendRows) {
+        const eid = String((p as Record<string, unknown>).email_id ?? "");
+        if (!eid) continue;
+        pendingByEmail.set(eid, (pendingByEmail.get(eid) ?? 0) + 1);
+      }
+    }
+  }
+
+  const rows: WorkspaceEmailListRow[] = rowsRaw.map((r) => {
+    const row = r as Record<string, unknown>;
+    const id = String(row.id ?? "");
+    return mapListRow(row, pendingByEmail.get(id) ?? 0);
+  });
   const total =
     typeof count === "number" && Number.isFinite(count) ? count : rows.length;
 
@@ -112,7 +184,7 @@ export async function fetchWorkspaceEmailDetailWithClient(
   const { data: email, error: e1 } = await client
     .from("rex_inbound_emails")
     .select(
-      "id,received_at,from_name,from_address,to_addresses,subject,body_text,body_html,snippet",
+      "id,received_at,from_name,from_address,to_addresses,subject,body_text,body_html,snippet,thread_participant_count",
     )
     .eq("id", id)
     .maybeSingle();
@@ -140,6 +212,32 @@ export async function fetchWorkspaceEmailDetailWithClient(
     : []
   ).map((a) => mapAttachmentRow(a as Record<string, unknown>));
 
+  const { data: extRows, error: e3 } = await client
+    .from("rex_email_extractions")
+    .select(
+      "id,kind,status,title,summary,detail,payload,created_contact_id,created_organisation_id,created_deal_id,created_suggestion_id",
+    )
+    .eq("email_id", id)
+    .order("created_at", { ascending: true });
+
+  if (e3) throw e3;
+
+  const extractions: WorkspaceEmailExtractionListItem[] = (Array.isArray(
+    extRows,
+  )
+    ? extRows
+    : []
+  ).map((x) => mapExtractionRow(x as Record<string, unknown>));
+
+  const tpc = row.thread_participant_count;
+  let threadParticipantCount: number | null = null;
+  if (typeof tpc === "number" && Number.isFinite(tpc)) {
+    threadParticipantCount = Math.floor(tpc);
+  } else if (typeof tpc === "string") {
+    const n = Number.parseInt(tpc, 10);
+    threadParticipantCount = Number.isFinite(n) ? n : null;
+  }
+
   return {
     id: String(row.id ?? ""),
     receivedAt:
@@ -151,7 +249,9 @@ export async function fetchWorkspaceEmailDetailWithClient(
     bodyText: row.body_text == null ? null : String(row.body_text),
     bodyHtml: row.body_html == null ? null : String(row.body_html),
     snippet: row.snippet == null ? null : String(row.snippet),
+    threadParticipantCount,
     attachments,
+    extractions,
   };
 }
 

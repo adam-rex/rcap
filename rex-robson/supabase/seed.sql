@@ -1,6 +1,7 @@
 -- Static sample data for SQL Editor / supabase db reset.
 -- For repeatable, count-driven fake data use: npm run db:seed -- --help
--- Order: contacts reference organisations; deals are standalone; attachments reference emails.
+-- Order: contacts reference organisations; deals are standalone; extractions/attachments reference emails.
+truncate table public.rex_email_extractions restart identity;
 truncate table public.rex_inbound_email_attachments restart identity;
 truncate table public.rex_inbound_emails restart identity;
 truncate table public.contacts restart identity;
@@ -80,7 +81,7 @@ insert into public.deals (title, size, sector, structure, status, notes) values
   ('Midwest Cold Storage platform', 85000000, 'industrials', 'buyout', 'live', 'Roll-up of regional cold chain assets; environmental capex plan in data room.');
 
 insert into public.rex_inbound_emails (
-  id, received_at, from_name, from_address, to_addresses, subject, body_text, snippet, external_message_id
+  id, received_at, from_name, from_address, to_addresses, subject, body_text, snippet, external_message_id, thread_participant_count
 ) values
   (
     'e2000000-0000-4000-8000-000000000001',
@@ -91,7 +92,8 @@ insert into public.rex_inbound_emails (
     'Re: Project Atlas — quick question on data room access',
     E'Hi Rex,\n\nFollowing up on the B2B payments diligence — can you confirm whether the Q1 cohort retention deck is in the data room? We need it for IC on Thursday.\n\nThanks,\nAlex',
     'Following up on the B2B payments diligence — can you confirm whether the Q1 cohort retention deck is in the data room?',
-    'seed-msg-atlas-001'
+    'seed-msg-atlas-001',
+    null
   ),
   (
     'e2000000-0000-4000-8000-000000000002',
@@ -102,7 +104,42 @@ insert into public.rex_inbound_emails (
     'Fwd: Intro — Harbor Freight secondary',
     E'Rex — looping you in. Marcus asked for a one-pager on stapled secondaries. Forwarding the thread below.\n\n— Priya',
     'Marcus asked for a one-pager on stapled secondaries.',
-    'seed-msg-harbor-002'
+    'seed-msg-harbor-002',
+    null
+  ),
+  (
+    'e2000000-0000-4000-8000-000000000003',
+    '2026-04-13 08:00:00+00',
+    'James',
+    'james@robson.capital',
+    array['rex@robson.capital']::text[],
+    'Intro — Marcus Peel / Shawbrook re bridging',
+    E'Hi Rex — can you track intro context for IC?\n\nMarcus at Shawbrook is looking at a bridging piece on a Manchester logistics asset (~£8M, 12mo).\n\nThanks,\nJames',
+    'Marcus at Shawbrook — bridging on Manchester logistics asset (~£8M).',
+    'seed-msg-marcus-intro-003',
+    3
+  );
+
+insert into public.rex_email_extractions (
+  email_id, kind, status, title, summary, detail, payload
+) values
+  (
+    'e2000000-0000-4000-8000-000000000003',
+    'contact',
+    'pending',
+    'Marcus Peel',
+    'Shawbrook Bank · Bridging & RE finance · £5–20M · UK',
+    null,
+    '{"name":"Marcus Peel","organisationName":"Shawbrook Bank","role":"Bridging & RE finance","geography":"UK","notes":"£5–20M ticket; UK focus."}'::jsonb
+  ),
+  (
+    'e2000000-0000-4000-8000-000000000003',
+    'deal_signal',
+    'pending',
+    'Bridging — Manchester logistics asset',
+    '~£8M · 12 month term · mentioned as live requirement',
+    null,
+    '{"title":"Bridging — Manchester logistics asset","size":8000000,"structure":"bridging","sector":"logistics","status":"live","notes":"12 month term; live requirement per thread."}'::jsonb
   );
 
 insert into public.rex_inbound_email_attachments (

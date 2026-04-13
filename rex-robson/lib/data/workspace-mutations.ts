@@ -309,3 +309,59 @@ export async function updateWorkspaceDeal(
     status: data.status == null ? null : String(data.status),
   };
 }
+
+/** ISO date (YYYY-MM-DD) from an inbound email timestamp for last_contact_date. */
+function isoDateFromReceivedAt(receivedAt: string): string {
+  const d = new Date(receivedAt);
+  if (Number.isNaN(d.getTime())) {
+    return new Date().toISOString().slice(0, 10);
+  }
+  return d.toISOString().slice(0, 10);
+}
+
+export async function touchWorkspaceContactLastContactDate(
+  client: SupabaseClient,
+  contactId: string,
+  receivedAtIso: string,
+): Promise<boolean> {
+  const dateStr = isoDateFromReceivedAt(receivedAtIso);
+  const { data, error } = await client
+    .from("contacts")
+    .update({ last_contact_date: dateStr })
+    .eq("id", contactId)
+    .select("id")
+    .maybeSingle();
+
+  if (error) throw error;
+  return data != null;
+}
+
+export type CreatedSuggestionRow = {
+  id: string;
+  title: string | null;
+  body: string | null;
+};
+
+export async function insertWorkspaceSuggestion(
+  client: SupabaseClient,
+  input: { title: string | null; body: string | null },
+): Promise<CreatedSuggestionRow> {
+  const { data, error } = await client
+    .from("suggestions")
+    .insert({
+      title: input.title,
+      body: input.body,
+      status: "pending",
+    })
+    .select("id,title,body")
+    .single();
+
+  if (error) throw error;
+  if (!data) throw new Error("Insert returned no row");
+
+  return {
+    id: String(data.id),
+    title: data.title == null ? null : String(data.title),
+    body: data.body == null ? null : String(data.body),
+  };
+}

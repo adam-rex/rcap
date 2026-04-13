@@ -1,6 +1,28 @@
 export const WORKSPACE_EMAILS_PAGE_SIZE_DEFAULT = 12;
 export const WORKSPACE_EMAILS_PAGE_SIZE_MAX = 50;
 
+export type RexEmailExtractionKind =
+  | "contact"
+  | "organisation"
+  | "deal_signal"
+  | "intro_request";
+
+export type RexEmailExtractionStatus = "pending" | "applied" | "dismissed";
+
+export type WorkspaceEmailExtractionListItem = {
+  id: string;
+  kind: RexEmailExtractionKind;
+  status: RexEmailExtractionStatus;
+  title: string;
+  summary: string | null;
+  detail: string | null;
+  payload: Record<string, unknown>;
+  createdContactId: string | null;
+  createdOrganisationId: string | null;
+  createdDealId: string | null;
+  createdSuggestionId: string | null;
+};
+
 export type WorkspaceEmailListRow = {
   id: string;
   fromName: string | null;
@@ -8,6 +30,8 @@ export type WorkspaceEmailListRow = {
   subject: string;
   snippet: string | null;
   receivedAt: string;
+  /** Pending Rex inbox items for this message (badge in list). */
+  pendingReviewCount: number;
 };
 
 export type WorkspaceEmailsPageResult = {
@@ -34,5 +58,7 @@ export type WorkspaceEmailDetail = {
   bodyText: string | null;
   bodyHtml: string | null;
   snippet: string | null;
+  threadParticipantCount: number | null;
   attachments: WorkspaceEmailAttachmentRow[];
+  extractions: WorkspaceEmailExtractionListItem[];
 };

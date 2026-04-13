@@ -5,8 +5,10 @@ import type { FormEvent } from "react";
 import { useCallback, useEffect, useState } from "react";
 import {
   WORKSPACE_EMAILS_PAGE_SIZE_DEFAULT,
+  type WorkspaceEmailExtractionListItem,
   type WorkspaceEmailListRow,
 } from "@/lib/data/workspace-emails.types";
+import { RexEmailInboxCard } from "./rex-email-inbox-card";
 import { WorkspaceBrowsePagination } from "./workspace-browse-pagination";
 import {
   WORKSPACE_BROWSE_ROW_BUTTON_CLASS,
@@ -35,7 +37,9 @@ type EmailDetail = {
   bodyText: string | null;
   bodyHtml: string | null;
   snippet: string | null;
+  threadParticipantCount: number | null;
   attachments: DetailAttachment[];
+  extractions: WorkspaceEmailExtractionListItem[];
 };
 
 function formatListDate(iso: string): string {
@@ -164,6 +168,18 @@ export function EmailsBrowsePanel() {
         setDetailError(parts.length > 0 ? parts.join(" ") : "Could not load email.");
         return;
       }
+      const extRaw = data.extractions;
+      const extractions: WorkspaceEmailExtractionListItem[] = Array.isArray(
+        extRaw,
+      )
+        ? (extRaw as WorkspaceEmailExtractionListItem[])
+        : [];
+      const tpc = data.threadParticipantCount;
+      const threadParticipantCount =
+        typeof tpc === "number" && Number.isFinite(tpc)
+          ? tpc
+          : null;
+
       setDetail({
         id: data.id,
         receivedAt: data.receivedAt,
@@ -174,7 +190,9 @@ export function EmailsBrowsePanel() {
         bodyText: data.bodyText ?? null,
         bodyHtml: data.bodyHtml ?? null,
         snippet: data.snippet ?? null,
+        threadParticipantCount,
         attachments: Array.isArray(data.attachments) ? data.attachments : [],
+        extractions,
       });
     } catch {
       setDetailError("Network error while loading email.");
@@ -193,6 +211,11 @@ export function EmailsBrowsePanel() {
     setDetail(null);
     setDetailError(null);
   };
+
+  const refreshEmailAndList = useCallback(() => {
+    if (selectedId) void loadDetail(selectedId);
+    void loadList();
+  }, [selectedId, loadDetail, loadList]);
 
   const onSearchSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -278,8 +301,15 @@ export function EmailsBrowsePanel() {
                         />
                         <div className="min-w-0 flex-1 text-left">
                           <div className="flex items-baseline justify-between gap-2">
-                            <p className="truncate text-sm font-medium text-charcoal">
-                              {row.subject || "(No subject)"}
+                            <p className="min-w-0 truncate text-sm font-medium text-charcoal">
+                              <span className="truncate">
+                                {row.subject || "(No subject)"}
+                              </span>
+                              {(row.pendingReviewCount ?? 0) > 0 ? (
+                                <span className="ml-2 inline-flex shrink-0 rounded-full bg-sky-100 px-2 py-0.5 align-middle text-[10px] font-semibold text-sky-950">
+                                  {row.pendingReviewCount} to review
+                                </span>
+                              ) : null}
                             </p>
                             <time
                               className="shrink-0 text-[11px] tabular-nums text-charcoal-light/75"
@@ -363,35 +393,68 @@ export function EmailsBrowsePanel() {
                 </p>
               ) : detail ? (
                 <article className="max-w-3xl">
-                  <h3 className="font-serif text-lg font-normal tracking-tight text-charcoal">
-                    {detail.subject || "(No subject)"}
-                  </h3>
-                  <dl className="mt-4 space-y-2 border-b border-charcoal/[0.08] pb-4 text-sm">
-                    <div className="flex flex-wrap gap-x-2 gap-y-1">
-                      <dt className="w-20 shrink-0 text-charcoal-light">From</dt>
-                      <dd className="min-w-0 text-charcoal">
-                        {detail.fromName
-                          ? `${detail.fromName} <${detail.fromAddress}>`
-                          : detail.fromAddress}
-                      </dd>
-                    </div>
-                    <div className="flex flex-wrap gap-x-2 gap-y-1">
-                      <dt className="w-20 shrink-0 text-charcoal-light">To</dt>
-                      <dd className="min-w-0 break-all text-charcoal">
-                        {detail.toAddresses.length > 0
-                          ? detail.toAddresses.join(", ")
-                          : "—"}
-                      </dd>
-                    </div>
-                    <div className="flex flex-wrap gap-x-2 gap-y-1">
-                      <dt className="w-20 shrink-0 text-charcoal-light">Date</dt>
-                      <dd className="text-charcoal">
+                  {detail.extractions.length > 0 ? (
+                    <RexEmailInboxCard
+                      emailId={detail.id}
+                      receivedAt={detail.receivedAt}
+                      fromName={detail.fromName}
+                      fromAddress={detail.fromAddress}
+                      toAddresses={detail.toAddresses}
+                      subject={detail.subject}
+                      threadParticipantCount={detail.threadParticipantCount}
+                      extractions={detail.extractions}
+                      onRefresh={refreshEmailAndList}
+                    />
+                  ) : (
+                    <>
+                      <h3 className="font-serif text-lg font-normal tracking-tight text-charcoal">
+                        {detail.subject || "(No subject)"}
+                      </h3>
+                      <dl className="mt-4 space-y-2 border-b border-charcoal/[0.08] pb-4 text-sm">
+                        <div className="flex flex-wrap gap-x-2 gap-y-1">
+                          <dt className="w-20 shrink-0 text-charcoal-light">
+                            From
+                          </dt>
+                          <dd className="min-w-0 text-charcoal">
+                            {detail.fromName
+                              ? `${detail.fromName} <${detail.fromAddress}>`
+                              : detail.fromAddress}
+                          </dd>
+                        </div>
+                        <div className="flex flex-wrap gap-x-2 gap-y-1">
+                          <dt className="w-20 shrink-0 text-charcoal-light">To</dt>
+                          <dd className="min-w-0 break-all text-charcoal">
+                            {detail.toAddresses.length > 0
+                              ? detail.toAddresses.join(", ")
+                              : "—"}
+                          </dd>
+                        </div>
+                        <div className="flex flex-wrap gap-x-2 gap-y-1">
+                          <dt className="w-20 shrink-0 text-charcoal-light">
+                            Date
+                          </dt>
+                          <dd className="text-charcoal">
+                            <time dateTime={detail.receivedAt}>
+                              {formatDetailDate(detail.receivedAt)}
+                            </time>
+                          </dd>
+                        </div>
+                      </dl>
+                    </>
+                  )}
+
+                  {detail.extractions.length > 0 ? (
+                    <div className="mt-6 border-t border-charcoal/[0.08] pt-4">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-charcoal-light/80">
+                        Source message
+                      </p>
+                      <p className="mt-1 text-sm text-charcoal-light">
                         <time dateTime={detail.receivedAt}>
                           {formatDetailDate(detail.receivedAt)}
                         </time>
-                      </dd>
+                      </p>
                     </div>
-                  </dl>
+                  ) : null}
 
                   {detail.attachments.length > 0 ? (
                     <div className="mt-4">

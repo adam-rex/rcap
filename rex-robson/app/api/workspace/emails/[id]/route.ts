@@ -26,12 +26,26 @@ export async function GET(_req: Request, context: RouteContext) {
       bodyText: row.bodyText,
       bodyHtml: row.bodyHtml,
       snippet: row.snippet,
+      threadParticipantCount: row.threadParticipantCount,
       attachments: row.attachments.map((a) => ({
         id: a.id,
         filename: a.filename,
         contentType: a.contentType,
         sizeBytes: a.sizeBytes,
         canDownload: Boolean(a.storageBucket && a.storagePath),
+      })),
+      extractions: row.extractions.map((x) => ({
+        id: x.id,
+        kind: x.kind,
+        status: x.status,
+        title: x.title,
+        summary: x.summary,
+        detail: x.detail,
+        payload: x.payload,
+        createdContactId: x.createdContactId,
+        createdOrganisationId: x.createdOrganisationId,
+        createdDealId: x.createdDealId,
+        createdSuggestionId: x.createdSuggestionId,
       })),
     });
   } catch (e) {
