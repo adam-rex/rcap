@@ -28,6 +28,7 @@ export async function POST(req: Request) {
     const row = await insertWorkspaceDeal(client, {
       title: fields.value.title,
       size: fields.value.size,
+      deal_type: fields.value.dealType,
       sector: fields.value.sector,
       structure: fields.value.structure,
       status: fields.value.status,

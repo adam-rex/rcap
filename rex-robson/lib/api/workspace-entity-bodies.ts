@@ -70,6 +70,7 @@ export function parseContactUpsertBody(
 export type DealUpsertBody = {
   title: string;
   size: number | null;
+  dealType: string | null;
   sector: string | null;
   structure: string | null;
   status: string | null;
@@ -85,6 +86,8 @@ export function parseDealUpsertBody(
   if (!title.ok) return title;
   const size = parseOptionalNumber(body, "size");
   if (!size.ok) return size;
+  const dealType = parseOptionalString(body, "dealType", 200);
+  if (!dealType.ok) return dealType;
   const sector = parseOptionalString(body, "sector", 200);
   if (!sector.ok) return sector;
   const structure = parseOptionalString(body, "structure", 200);
@@ -98,6 +101,7 @@ export function parseDealUpsertBody(
     value: {
       title: title.value,
       size: size.value,
+      dealType: dealType.value,
       sector: sector.value,
       structure: structure.value,
       status: status.value,

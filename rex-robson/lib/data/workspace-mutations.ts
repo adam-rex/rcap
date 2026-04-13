@@ -85,6 +85,7 @@ export type CreatedDealRow = {
   id: string;
   title: string;
   size: number | null;
+  deal_type: string | null;
   sector: string | null;
   structure: string | null;
   status: string | null;
@@ -95,6 +96,7 @@ export async function insertWorkspaceDeal(
   input: {
     title: string;
     size: number | null;
+    deal_type: string | null;
     sector: string | null;
     structure: string | null;
     status: string | null;
@@ -106,12 +108,13 @@ export async function insertWorkspaceDeal(
     .insert({
       title: input.title,
       size: input.size,
+      deal_type: input.deal_type,
       sector: input.sector,
       structure: input.structure,
       status: input.status,
       notes: input.notes,
     })
-    .select("id,title,size,sector,structure,status")
+    .select("id,title,size,deal_type,sector,structure,status")
     .single();
 
   if (error) throw error;
@@ -130,6 +133,7 @@ export async function insertWorkspaceDeal(
     id: String(data.id),
     title: String(data.title ?? ""),
     size,
+    deal_type: data.deal_type == null ? null : String(data.deal_type),
     sector: data.sector == null ? null : String(data.sector),
     structure: data.structure == null ? null : String(data.structure),
     status: data.status == null ? null : String(data.status),
@@ -251,7 +255,7 @@ export async function fetchWorkspaceDealById(
 ): Promise<WorkspaceDealDetail | null> {
   const { data, error } = await client
     .from("deals")
-    .select("id,title,size,sector,structure,status,notes")
+    .select("id,title,size,deal_type,sector,structure,status,notes")
     .eq("id", id)
     .maybeSingle();
 
@@ -262,6 +266,7 @@ export async function fetchWorkspaceDealById(
     id: String(data.id),
     title: String(data.title ?? ""),
     size: parseDealSize(data.size),
+    deal_type: data.deal_type == null ? null : String(data.deal_type),
     sector: data.sector == null ? null : String(data.sector),
     structure: data.structure == null ? null : String(data.structure),
     status: data.status == null ? null : String(data.status),
@@ -275,6 +280,7 @@ export async function updateWorkspaceDeal(
   input: {
     title: string;
     size: number | null;
+    deal_type: string | null;
     sector: string | null;
     structure: string | null;
     status: string | null;
@@ -286,13 +292,14 @@ export async function updateWorkspaceDeal(
     .update({
       title: input.title,
       size: input.size,
+      deal_type: input.deal_type,
       sector: input.sector,
       structure: input.structure,
       status: input.status,
       notes: input.notes,
     })
     .eq("id", id)
-    .select("id,title,size,sector,structure,status")
+    .select("id,title,size,deal_type,sector,structure,status")
     .maybeSingle();
 
   if (error) throw error;
@@ -304,6 +311,7 @@ export async function updateWorkspaceDeal(
     id: String(data.id),
     title: String(data.title ?? ""),
     size,
+    deal_type: data.deal_type == null ? null : String(data.deal_type),
     sector: data.sector == null ? null : String(data.sector),
     structure: data.structure == null ? null : String(data.structure),
     status: data.status == null ? null : String(data.status),

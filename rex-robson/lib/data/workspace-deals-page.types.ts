@@ -5,6 +5,7 @@ export type WorkspaceDealPageRow = {
   id: string;
   title: string;
   size: number | null;
+  deal_type: string | null;
   sector: string | null;
   structure: string | null;
   status: string | null;

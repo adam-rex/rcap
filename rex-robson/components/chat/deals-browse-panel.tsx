@@ -47,6 +47,7 @@ export function DealsBrowsePanel() {
   const [formError, setFormError] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState("");
   const [newSize, setNewSize] = useState("");
+  const [newDealType, setNewDealType] = useState("");
   const [newSector, setNewSector] = useState("");
   const [newStructure, setNewStructure] = useState("");
   const [newStatus, setNewStatus] = useState("");
@@ -115,6 +116,7 @@ export function DealsBrowsePanel() {
     setDetailLoading(false);
     setNewTitle("");
     setNewSize("");
+    setNewDealType("");
     setNewSector("");
     setNewStructure("");
     setNewStatus("");
@@ -131,6 +133,7 @@ export function DealsBrowsePanel() {
     setDetailLoading(true);
     setNewTitle("");
     setNewSize("");
+    setNewDealType("");
     setNewSector("");
     setNewStructure("");
     setNewStatus("");
@@ -141,6 +144,7 @@ export function DealsBrowsePanel() {
         error?: string;
         title?: string;
         size?: number | null;
+        dealType?: string | null;
         sector?: string | null;
         structure?: string | null;
         status?: string | null;
@@ -160,6 +164,7 @@ export function DealsBrowsePanel() {
           ? String(data.size)
           : "",
       );
+      setNewDealType(data.dealType ?? "");
       setNewSector(data.sector ?? "");
       setNewStructure(data.structure ?? "");
       setNewStatus(data.status ?? "");
@@ -186,6 +191,7 @@ export function DealsBrowsePanel() {
     const payload = {
       title: newTitle,
       size: newSize.trim() === "" ? null : newSize.trim(),
+      dealType: newDealType.trim() === "" ? null : newDealType.trim(),
       sector: newSector.trim() === "" ? null : newSector.trim(),
       structure: newStructure.trim() === "" ? null : newStructure.trim(),
       status: newStatus.trim() === "" ? null : newStatus.trim(),
@@ -277,7 +283,7 @@ export function DealsBrowsePanel() {
                 </li>
               ))
             : rows.map((d) => {
-                const meta = [d.sector, d.structure, d.status]
+                const meta = [d.deal_type, d.sector, d.structure, d.status]
                   .filter(Boolean)
                   .join(" · ");
                 return (
@@ -359,6 +365,21 @@ export function DealsBrowsePanel() {
                   onChange={(e) => setNewSize(e.target.value)}
                   className={WORKSPACE_FORM_INPUT_CLASS}
                   placeholder="Optional numeric size"
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="deal-form-deal-type"
+                  className={WORKSPACE_FORM_LABEL_CLASS}
+                >
+                  Deal type
+                </label>
+                <input
+                  id="deal-form-deal-type"
+                  value={newDealType}
+                  onChange={(e) => setNewDealType(e.target.value)}
+                  className={WORKSPACE_FORM_INPUT_CLASS}
+                  placeholder="e.g. Equity deal, Senior debt, Bridging"
                 />
               </div>
               <div>

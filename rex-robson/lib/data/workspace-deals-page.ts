@@ -36,6 +36,7 @@ function parseRpcPayload(data: unknown): WorkspaceDealsPageResult {
       id: String(x.id ?? ""),
       title: String(x.title ?? ""),
       size: parseSize(x.size),
+      deal_type: x.deal_type == null ? null : String(x.deal_type),
       sector: x.sector == null ? null : String(x.sector),
       structure: x.structure == null ? null : String(x.structure),
       status: x.status == null ? null : String(x.status),

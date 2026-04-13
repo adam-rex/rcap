@@ -25,6 +25,7 @@ export async function GET(_req: Request, context: RouteContext) {
       id: row.id,
       title: row.title,
       size: row.size,
+      dealType: row.deal_type,
       sector: row.sector,
       structure: row.structure,
       status: row.status,
@@ -59,6 +60,7 @@ export async function PATCH(req: Request, context: RouteContext) {
     const row = await updateWorkspaceDeal(client, id, {
       title: fields.value.title,
       size: fields.value.size,
+      deal_type: fields.value.dealType,
       sector: fields.value.sector,
       structure: fields.value.structure,
       status: fields.value.status,
