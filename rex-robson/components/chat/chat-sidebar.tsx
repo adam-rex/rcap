@@ -17,8 +17,6 @@ const navItems = [
   { id: "contacts", label: "Contacts", icon: Users },
   { id: "organisations", label: "Organisations", icon: Building2 },
   { id: "deal-canvas", label: "Deal Canvas", icon: LayoutGrid },
-  { id: "emails", label: "Emails", icon: Mail },
-  { id: "call-logs", label: "Call Logs", icon: NotebookText },
   { id: "tasks", label: "Tasks", icon: ListTodo },
   { id: "suggestions", label: "Suggestions", icon: Sparkles },
   { id: "upload", label: "Upload & Import", icon: FileUp },
