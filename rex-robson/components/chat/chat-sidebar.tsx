@@ -5,8 +5,6 @@ import {
   FileUp,
   LayoutGrid,
   ListTodo,
-  NotebookText,
-  Mail,
   MessageCircle,
   Sparkles,
   Users,
@@ -14,7 +12,7 @@ import {
 
 const navItems = [
   { id: "ask", label: "Ask Rex", icon: MessageCircle },
-  { id: "contacts", label: "Contacts", icon: Users },
+  { id: "contacts", label: "Members", icon: Users },
   { id: "organisations", label: "Organisations", icon: Building2 },
   { id: "deal-canvas", label: "Deal Canvas", icon: LayoutGrid },
   { id: "tasks", label: "Tasks", icon: ListTodo },

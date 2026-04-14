@@ -186,9 +186,7 @@ export function ChatShell({
         </header>
         <main
           className={
-            activeNav === "ask" ||
-            activeNav === "emails" ||
-            activeNav === "call-logs"
+            activeNav === "ask"
               ? "flex min-h-0 flex-1 flex-col overflow-hidden"
               : "flex min-h-0 flex-1 flex-col overflow-y-auto"
           }
@@ -209,10 +207,6 @@ export function ChatShell({
             <OrganisationsBrowsePanel />
           ) : activeNav === "deal-canvas" ? (
             <DealsBrowsePanel />
-          ) : activeNav === "emails" ? (
-            <EmailsBrowsePanel />
-          ) : activeNav === "call-logs" ? (
-            <EmailsBrowsePanel mailbox="call_logs" />
           ) : activeNav === "tasks" ? (
             <RexTasksPanel />
           ) : activeNav === "suggestions" ? (
