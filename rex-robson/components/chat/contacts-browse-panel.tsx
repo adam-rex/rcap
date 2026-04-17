@@ -77,6 +77,8 @@ type ApiErr = { error?: string; hint?: string };
 /** Select value: create org via inline fields, then link contact. */
 const CONTACT_FORM_NEW_ORG_VALUE = "__new__";
 
+const CONTACT_TYPE_OPTIONS = ["Founder", "Investor", "Lender", "Other"] as const;
+
 export function ContactsBrowsePanel() {
   const pageSize = WORKSPACE_CONTACTS_PAGE_SIZE_DEFAULT;
   const [queryInput, setQueryInput] = useState("");
@@ -100,8 +102,12 @@ export function ContactsBrowsePanel() {
   const [inlineNewOrgName, setInlineNewOrgName] = useState("");
   const [inlineNewOrgType, setInlineNewOrgType] = useState("");
   const [inlineNewOrgDescription, setInlineNewOrgDescription] = useState("");
+  const [newContactType, setNewContactType] = useState("");
+  const [newSector, setNewSector] = useState("");
   const [newRole, setNewRole] = useState("");
   const [newGeography, setNewGeography] = useState("");
+  const [newPhone, setNewPhone] = useState("");
+  const [newEmail, setNewEmail] = useState("");
   const [newNotes, setNewNotes] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [activeOrganisationType, setActiveOrganisationType] = useState("");
@@ -226,12 +232,16 @@ export function ContactsBrowsePanel() {
     setEditingId(null);
     setDetailLoading(false);
     setNewName("");
+    setNewContactType("");
+    setNewSector("");
     setNewOrganisationId("");
     setInlineNewOrgName("");
     setInlineNewOrgType("");
     setInlineNewOrgDescription("");
     setNewRole("");
     setNewGeography("");
+    setNewPhone("");
+    setNewEmail("");
     setNewNotes("");
     setFormError(null);
     setFormOpen(true);
@@ -244,21 +254,29 @@ export function ContactsBrowsePanel() {
     setFormOpen(true);
     setDetailLoading(true);
     setNewName("");
+    setNewContactType("");
+    setNewSector("");
     setNewOrganisationId("");
     setInlineNewOrgName("");
     setInlineNewOrgType("");
     setInlineNewOrgDescription("");
     setNewRole("");
     setNewGeography("");
+    setNewPhone("");
+    setNewEmail("");
     setNewNotes("");
     try {
       const res = await fetch(`/api/workspace/contacts/${c.id}`);
       const data = (await res.json()) as {
         error?: string;
         name?: string;
+        contactType?: string | null;
+        sector?: string | null;
         organisationId?: string | null;
         role?: string | null;
         geography?: string | null;
+        phone?: string | null;
+        email?: string | null;
         notes?: string | null;
       };
       if (!res.ok) {
@@ -270,9 +288,13 @@ export function ContactsBrowsePanel() {
         return;
       }
       setNewName(data.name ?? "");
+      setNewContactType(data.contactType ?? "");
+      setNewSector(data.sector ?? "");
       setNewOrganisationId(data.organisationId ?? "");
       setNewRole(data.role ?? "");
       setNewGeography(data.geography ?? "");
+      setNewPhone(data.phone ?? "");
+      setNewEmail(data.email ?? "");
       setNewNotes(data.notes ?? "");
     } catch {
       setFormError("Network error while loading contact.");
@@ -363,9 +385,13 @@ export function ContactsBrowsePanel() {
 
     const payload = {
       name: newName,
+      contactType: newContactType,
+      sector: newSector,
       organisationId,
       role: newRole.trim() === "" ? null : newRole.trim(),
       geography: newGeography.trim() === "" ? null : newGeography.trim(),
+      phone: newPhone.trim() === "" ? null : newPhone.trim(),
+      email: newEmail.trim() === "" ? null : newEmail.trim(),
       notes: newNotes.trim() === "" ? null : newNotes.trim(),
     };
     try {
@@ -500,7 +526,7 @@ export function ContactsBrowsePanel() {
                 </li>
               ))
             : rows.map((c) => {
-                const sub = [c.organisation_name, c.role, c.geography]
+                const sub = [c.contact_type, c.sector, c.geography]
                   .filter(Boolean)
                   .join(" · ");
                 const strength = recencyStrength(c.last_contact_date);
@@ -594,6 +620,44 @@ export function ContactsBrowsePanel() {
                   className={WORKSPACE_FORM_INPUT_CLASS}
                   placeholder="Full name"
                   autoComplete="name"
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="contact-form-type"
+                  className={WORKSPACE_FORM_LABEL_CLASS}
+                >
+                  Select Type
+                </label>
+                <select
+                  id="contact-form-type"
+                  required
+                  value={newContactType}
+                  onChange={(e) => setNewContactType(e.target.value)}
+                  className={WORKSPACE_FORM_INPUT_CLASS}
+                >
+                  <option value="">Select a type…</option>
+                  {CONTACT_TYPE_OPTIONS.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label
+                  htmlFor="contact-form-sector"
+                  className={WORKSPACE_FORM_LABEL_CLASS}
+                >
+                  Sector
+                </label>
+                <input
+                  id="contact-form-sector"
+                  required
+                  value={newSector}
+                  onChange={(e) => setNewSector(e.target.value)}
+                  className={WORKSPACE_FORM_INPUT_CLASS}
+                  placeholder="e.g. Fintech"
                 />
               </div>
               <div>
@@ -722,6 +786,44 @@ export function ContactsBrowsePanel() {
                   onChange={(e) => setNewGeography(e.target.value)}
                   className={WORKSPACE_FORM_INPUT_CLASS}
                   placeholder="Region or city"
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="contact-form-phone"
+                  className={WORKSPACE_FORM_LABEL_CLASS}
+                >
+                  Phone{" "}
+                  <span className="font-normal text-charcoal-light/70">
+                    (optional)
+                  </span>
+                </label>
+                <input
+                  id="contact-form-phone"
+                  value={newPhone}
+                  onChange={(e) => setNewPhone(e.target.value)}
+                  className={WORKSPACE_FORM_INPUT_CLASS}
+                  placeholder="+44…"
+                  autoComplete="tel"
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="contact-form-email"
+                  className={WORKSPACE_FORM_LABEL_CLASS}
+                >
+                  Email{" "}
+                  <span className="font-normal text-charcoal-light/70">
+                    (optional)
+                  </span>
+                </label>
+                <input
+                  id="contact-form-email"
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  className={WORKSPACE_FORM_INPUT_CLASS}
+                  placeholder="name@company.com"
+                  autoComplete="email"
                 />
               </div>
               <div>

@@ -41,8 +41,12 @@ export async function insertWorkspaceOrganisation(
 export type CreatedContactRow = {
   id: string;
   name: string;
+  contact_type: string | null;
+  sector: string | null;
   role: string | null;
   geography: string | null;
+  phone: string | null;
+  email: string | null;
   organisation_id: string | null;
 };
 
@@ -50,9 +54,13 @@ export async function insertWorkspaceContact(
   client: SupabaseClient,
   input: {
     name: string;
+    contact_type: string;
+    sector: string;
     organisation_id: string | null;
     role: string | null;
     geography: string | null;
+    phone: string | null;
+    email: string | null;
     notes: string | null;
   },
 ): Promise<CreatedContactRow> {
@@ -60,12 +68,16 @@ export async function insertWorkspaceContact(
     .from("contacts")
     .insert({
       name: input.name,
+      contact_type: input.contact_type,
+      sector: input.sector,
       organisation_id: input.organisation_id,
       role: input.role,
       geography: input.geography,
+      phone: input.phone,
+      email: input.email,
       notes: input.notes,
     })
-    .select("id,name,role,geography,organisation_id")
+    .select("id,name,contact_type,sector,role,geography,phone,email,organisation_id")
     .single();
 
   if (error) throw error;
@@ -74,8 +86,12 @@ export async function insertWorkspaceContact(
   return {
     id: String(data.id),
     name: String(data.name ?? ""),
+    contact_type: data.contact_type == null ? null : String(data.contact_type),
+    sector: data.sector == null ? null : String(data.sector),
     role: data.role == null ? null : String(data.role),
     geography: data.geography == null ? null : String(data.geography),
+    phone: data.phone == null ? null : String(data.phone),
+    email: data.email == null ? null : String(data.email),
     organisation_id:
       data.organisation_id == null ? null : String(data.organisation_id),
   };
@@ -191,9 +207,13 @@ export async function updateWorkspaceOrganisation(
 export type WorkspaceContactDetail = {
   id: string;
   name: string;
+  contact_type: string | null;
+  sector: string | null;
   organisation_id: string | null;
   role: string | null;
   geography: string | null;
+  phone: string | null;
+  email: string | null;
   notes: string | null;
 };
 
@@ -203,7 +223,7 @@ export async function fetchWorkspaceContactById(
 ): Promise<WorkspaceContactDetail | null> {
   const { data, error } = await client
     .from("contacts")
-    .select("id,name,organisation_id,role,geography,notes")
+    .select("id,name,contact_type,sector,organisation_id,role,geography,phone,email,notes")
     .eq("id", id)
     .maybeSingle();
 
@@ -213,10 +233,14 @@ export async function fetchWorkspaceContactById(
   return {
     id: String(data.id),
     name: String(data.name ?? ""),
+    contact_type: data.contact_type == null ? null : String(data.contact_type),
+    sector: data.sector == null ? null : String(data.sector),
     organisation_id:
       data.organisation_id == null ? null : String(data.organisation_id),
     role: data.role == null ? null : String(data.role),
     geography: data.geography == null ? null : String(data.geography),
+    phone: data.phone == null ? null : String(data.phone),
+    email: data.email == null ? null : String(data.email),
     notes: data.notes == null ? null : String(data.notes),
   };
 }
@@ -226,9 +250,13 @@ export async function updateWorkspaceContact(
   id: string,
   input: {
     name: string;
+    contact_type: string;
+    sector: string;
     organisation_id: string | null;
     role: string | null;
     geography: string | null;
+    phone: string | null;
+    email: string | null;
     notes: string | null;
   },
 ): Promise<CreatedContactRow | null> {
@@ -236,13 +264,17 @@ export async function updateWorkspaceContact(
     .from("contacts")
     .update({
       name: input.name,
+      contact_type: input.contact_type,
+      sector: input.sector,
       organisation_id: input.organisation_id,
       role: input.role,
       geography: input.geography,
+      phone: input.phone,
+      email: input.email,
       notes: input.notes,
     })
     .eq("id", id)
-    .select("id,name,role,geography,organisation_id")
+    .select("id,name,contact_type,sector,role,geography,phone,email,organisation_id")
     .maybeSingle();
 
   if (error) throw error;
@@ -251,8 +283,12 @@ export async function updateWorkspaceContact(
   return {
     id: String(data.id),
     name: String(data.name ?? ""),
+    contact_type: data.contact_type == null ? null : String(data.contact_type),
+    sector: data.sector == null ? null : String(data.sector),
     role: data.role == null ? null : String(data.role),
     geography: data.geography == null ? null : String(data.geography),
+    phone: data.phone == null ? null : String(data.phone),
+    email: data.email == null ? null : String(data.email),
     organisation_id:
       data.organisation_id == null ? null : String(data.organisation_id),
   };

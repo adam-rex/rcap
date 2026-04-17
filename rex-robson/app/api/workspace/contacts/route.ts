@@ -27,9 +27,13 @@ export async function POST(req: Request) {
     const client = await getWorkspaceWriteClient();
     const row = await insertWorkspaceContact(client, {
       name: fields.value.name,
+      contact_type: fields.value.contactType,
+      sector: fields.value.sector,
       organisation_id: fields.value.organisationId,
       role: fields.value.role,
       geography: fields.value.geography,
+      phone: fields.value.phone,
+      email: fields.value.email,
       notes: fields.value.notes,
     });
     return NextResponse.json(row, { status: 201 });

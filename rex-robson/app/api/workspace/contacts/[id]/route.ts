@@ -24,9 +24,13 @@ export async function GET(_req: Request, context: RouteContext) {
     return NextResponse.json({
       id: row.id,
       name: row.name,
+      contactType: row.contact_type,
+      sector: row.sector,
       organisationId: row.organisation_id,
       role: row.role,
       geography: row.geography,
+      phone: row.phone,
+      email: row.email,
       notes: row.notes,
     });
   } catch (e) {
@@ -57,9 +61,13 @@ export async function PATCH(req: Request, context: RouteContext) {
     const client = await getWorkspaceWriteClient();
     const row = await updateWorkspaceContact(client, id, {
       name: fields.value.name,
+      contact_type: fields.value.contactType,
+      sector: fields.value.sector,
       organisation_id: fields.value.organisationId,
       role: fields.value.role,
       geography: fields.value.geography,
+      phone: fields.value.phone,
+      email: fields.value.email,
       notes: fields.value.notes,
     });
     if (!row) {

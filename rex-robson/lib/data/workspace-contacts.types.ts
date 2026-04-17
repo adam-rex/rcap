@@ -4,6 +4,8 @@ export const WORKSPACE_CONTACTS_PAGE_SIZE_MAX = 50;
 export type WorkspaceContactPageRow = {
   id: string;
   name: string;
+  contact_type: string | null;
+  sector: string | null;
   role: string | null;
   geography: string | null;
   last_contact_date: string | null;

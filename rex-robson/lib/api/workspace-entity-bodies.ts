@@ -34,9 +34,13 @@ export function parseOrganisationUpsertBody(
 
 export type ContactUpsertBody = {
   name: string;
+  contactType: string;
+  sector: string;
   organisationId: string | null;
   role: string | null;
   geography: string | null;
+  phone: string | null;
+  email: string | null;
   notes: string | null;
 };
 
@@ -47,21 +51,33 @@ export function parseContactUpsertBody(
   | { ok: false; error: string } {
   const name = parseRequiredString(body, "name", 300);
   if (!name.ok) return name;
+  const contactType = parseRequiredString(body, "contactType", 40);
+  if (!contactType.ok) return contactType;
+  const sector = parseRequiredString(body, "sector", 200);
+  if (!sector.ok) return sector;
   const organisationId = parseOptionalUuid(body, "organisationId");
   if (!organisationId.ok) return organisationId;
   const role = parseOptionalString(body, "role", 300);
   if (!role.ok) return role;
   const geography = parseOptionalString(body, "geography", 500);
   if (!geography.ok) return geography;
+  const phone = parseOptionalString(body, "phone", 80);
+  if (!phone.ok) return phone;
+  const email = parseOptionalString(body, "email", 320);
+  if (!email.ok) return email;
   const notes = parseOptionalString(body, "notes", 8000);
   if (!notes.ok) return notes;
   return {
     ok: true,
     value: {
       name: name.value,
+      contactType: contactType.value,
+      sector: sector.value,
       organisationId: organisationId.value,
       role: role.value,
       geography: geography.value,
+      phone: phone.value,
+      email: email.value,
       notes: notes.value,
     },
   };

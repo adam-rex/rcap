@@ -199,9 +199,13 @@ export async function applyRexEmailExtraction(
         }
         const contact = await insertWorkspaceContact(client, {
           name,
+          contact_type: optStr(p.contactType) ?? "Other",
+          sector: optStr(p.sector) ?? "Other",
           organisation_id: organisationId,
           role: optStr(p.role),
           geography: optStr(p.geography),
+          phone: optStr(p.phone),
+          email: optStr(p.email),
           notes: optStr(p.notes),
         });
         await markApplied(client, params.extractionId, {
