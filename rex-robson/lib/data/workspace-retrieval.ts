@@ -1,23 +1,39 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
-  fetchContactsByPattern,
-  fetchDealsByPattern,
-  fetchOrganisationsByPattern,
-  fetchPendingSuggestionsByPattern,
+  buildSearchPatternsFromQuery,
+  fetchContactsByPatterns,
+  fetchDealsByPatterns,
+  fetchOrganisationsByPatterns,
+  fetchPendingSuggestionsByPatterns,
+  fetchRecentContactsPreview,
+  fetchRecentDealsPreview,
+  looksLikeExploratoryWorkspaceQuery,
   safeIlikePattern,
 } from "./workspace-query-helpers";
 
 const PER_TABLE = 10;
 
+function formatContactLine(c: Record<string, unknown>): string {
+  const name = c.name ? String(c.name) : "(unknown)";
+  const meta = [
+    c.contact_type ? String(c.contact_type) : null,
+    c.sector ? String(c.sector) : null,
+    c.geography ? String(c.geography) : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
+  return meta ? `- **${name}** — ${meta}` : `- **${name}**`;
+}
+
 /**
  * Full deterministic scan (same ILIKE strategy as tool handlers), formatted for reconciliation.
+ * Uses multi-token patterns plus optional recent-row preview for exploratory questions.
  */
 export async function buildWorkspaceRetrievalContext(
   supabase: SupabaseClient,
   query: string,
 ): Promise<string> {
-  const pattern = safeIlikePattern(query);
-  if (!pattern) {
+  if (!safeIlikePattern(query)) {
     return [
       "## Deterministic workspace retrieval",
       "",
@@ -26,18 +42,43 @@ export async function buildWorkspaceRetrievalContext(
     ].join("\n");
   }
 
-  const [contacts, orgs, deals, suggestions] = await Promise.all([
-    fetchContactsByPattern(supabase, pattern, PER_TABLE),
-    fetchOrganisationsByPattern(supabase, pattern, PER_TABLE),
-    fetchDealsByPattern(supabase, pattern, PER_TABLE),
-    fetchPendingSuggestionsByPattern(supabase, pattern, PER_TABLE),
+  const patterns = buildSearchPatternsFromQuery(query);
+
+  let [contacts, orgs, deals, suggestions] = await Promise.all([
+    fetchContactsByPatterns(supabase, patterns, PER_TABLE),
+    fetchOrganisationsByPatterns(supabase, patterns, PER_TABLE),
+    fetchDealsByPatterns(supabase, patterns, PER_TABLE),
+    fetchPendingSuggestionsByPatterns(supabase, patterns, PER_TABLE),
   ]);
+
+  let exploratoryNote = "";
+  const allEmpty =
+    contacts.length === 0 &&
+    orgs.length === 0 &&
+    deals.length === 0 &&
+    suggestions.length === 0;
+
+  if (allEmpty && looksLikeExploratoryWorkspaceQuery(query)) {
+    const [recentC, recentD] = await Promise.all([
+      fetchRecentContactsPreview(supabase, 8),
+      fetchRecentDealsPreview(supabase, 8),
+    ]);
+    if (recentC.length > 0 || recentD.length > 0) {
+      contacts = recentC;
+      deals = recentD;
+      exploratoryNote = [
+        "",
+        "_Exploratory context: keyword scan returned no rows; showing a small **recent** sample of contacts and deals so you can reason about matches and intros without inventing data._",
+        "",
+      ].join("\n");
+    }
+  }
 
   const lines: string[] = [
     "## Deterministic workspace retrieval",
     "",
-    "Independent full-scan on the user’s exact query (fixed ILIKE on known columns). Use this as a baseline for reconciliation.",
-    "",
+    "Baseline uses the user’s query as one or more ILIKE patterns (full string plus meaningful tokens). Use this as a factual anchor; tool calls may use different terms.",
+    exploratoryNote,
   ];
 
   lines.push(`### Contacts (${contacts.length})`);
@@ -45,15 +86,7 @@ export async function buildWorkspaceRetrievalContext(
     lines.push("_None matched._");
   } else {
     for (const c of contacts) {
-      const bits = [
-        `id=${c.id}`,
-        `name=${c.name}`,
-        c.role ? `role=${c.role}` : null,
-        c.geography ? `geography=${c.geography}` : null,
-        c.organisation_id ? `organisation_id=${c.organisation_id}` : null,
-        c.notes ? `notes=${String(c.notes).slice(0, 280)}` : null,
-      ].filter(Boolean);
-      lines.push(`- ${bits.join(" | ")}`);
+      lines.push(formatContactLine(c));
     }
   }
   lines.push("");
@@ -64,14 +97,11 @@ export async function buildWorkspaceRetrievalContext(
   } else {
     for (const o of orgs) {
       const bits = [
-        `id=${o.id}`,
-        `name=${o.name}`,
-        o.type ? `type=${o.type}` : null,
-        o.description
-          ? `description=${String(o.description).slice(0, 280)}`
-          : null,
+        o.type ? String(o.type) : null,
+        o.description ? String(o.description).slice(0, 120) : null,
       ].filter(Boolean);
-      lines.push(`- ${bits.join(" | ")}`);
+      const name = o.name ? String(o.name) : "(unknown)";
+      lines.push(bits.length ? `- **${name}** — ${bits.join(" · ")}` : `- **${name}**`);
     }
   }
   lines.push("");
@@ -82,15 +112,13 @@ export async function buildWorkspaceRetrievalContext(
   } else {
     for (const d of deals) {
       const bits = [
-        `id=${d.id}`,
-        `title=${d.title}`,
-        d.status ? `status=${d.status}` : null,
-        d.sector ? `sector=${d.sector}` : null,
-        d.structure ? `structure=${d.structure}` : null,
-        d.size != null ? `size=${d.size}` : null,
-        d.notes ? `notes=${String(d.notes).slice(0, 280)}` : null,
+        d.status ? String(d.status) : null,
+        d.sector ? String(d.sector) : null,
+        d.structure ? String(d.structure) : null,
+        d.size != null ? `£${d.size}` : null,
       ].filter(Boolean);
-      lines.push(`- ${bits.join(" | ")}`);
+      const title = d.title ? String(d.title) : "(untitled deal)";
+      lines.push(bits.length ? `- **${title}** — ${bits.join(" · ")}` : `- **${title}**`);
     }
   }
   lines.push("");
@@ -101,11 +129,10 @@ export async function buildWorkspaceRetrievalContext(
   } else {
     for (const s of suggestions) {
       const bits = [
-        `id=${s.id}`,
-        s.title ? `title=${s.title}` : null,
-        s.body ? `body=${String(s.body).slice(0, 280)}` : null,
+        s.body ? String(s.body).slice(0, 160) : null,
       ].filter(Boolean);
-      lines.push(`- ${bits.join(" | ")}`);
+      const title = s.title ? String(s.title) : "(untitled suggestion)";
+      lines.push(bits.length ? `- **${title}** — ${bits.join(" · ")}` : `- **${title}**`);
     }
   }
 

@@ -1,3 +1,7 @@
+import type React from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+
 export type ChatMessage = {
   id: string;
   role: "user" | "rex";
@@ -7,6 +11,36 @@ export type ChatMessage = {
 type ChatMessageListProps = {
   messages: ChatMessage[];
 };
+
+const rexMarkdownComponents = {
+  p: (props: React.HTMLAttributes<HTMLParagraphElement>) => (
+    <p className="my-1 leading-relaxed" {...props} />
+  ),
+  ul: (props: React.HTMLAttributes<HTMLUListElement>) => (
+    <ul className="my-1 list-disc space-y-1 pl-5" {...props} />
+  ),
+  ol: (props: React.HTMLAttributes<HTMLOListElement>) => (
+    <ol className="my-1 list-decimal space-y-1 pl-5" {...props} />
+  ),
+  li: (props: React.HTMLAttributes<HTMLLIElement>) => (
+    <li className="leading-relaxed" {...props} />
+  ),
+  strong: (props: React.HTMLAttributes<HTMLElement>) => (
+    <strong className="font-semibold" {...props} />
+  ),
+  code: (props: React.HTMLAttributes<HTMLElement>) => (
+    <code
+      className="rounded bg-charcoal/[0.06] px-1 py-0.5 font-mono text-[0.92em]"
+      {...props}
+    />
+  ),
+  pre: (props: React.HTMLAttributes<HTMLPreElement>) => (
+    <pre
+      className="my-2 overflow-x-auto rounded-lg bg-charcoal/[0.06] p-2 font-mono text-[0.92em]"
+      {...props}
+    />
+  ),
+} as const;
 
 export function ChatMessageList({ messages }: ChatMessageListProps) {
   return (
@@ -29,7 +63,12 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
               role="article"
               aria-label="Rex"
             >
-              {m.text}
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={rexMarkdownComponents}
+              >
+                {m.text}
+              </ReactMarkdown>
             </div>
           </div>
         ),

@@ -36,7 +36,7 @@ export const WORKSPACE_SEARCH_TOOLS = [
   {
     name: "search_contacts",
     description:
-      "Search contacts by substring on name, role, notes, and geography (ILIKE).",
+      "Search contacts by substring (ILIKE) on name, role, notes, geography, contact_type, sector, phone, email, and text built from sectors[] and deal_types[] arrays.",
     input_schema: {
       type: "object",
       properties: {
