@@ -1,6 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import {
+  ZERO_DASHBOARD_METRICS,
+  type DashboardMetrics,
+} from "@/lib/data/dashboard-metrics.types";
 import type { WorkspaceLists } from "@/lib/data/workspace-lists";
 import type { RexDashboardStats } from "@/lib/rex/voice";
 import { rexEmptySuggestions } from "@/lib/rex/voice";
@@ -8,8 +12,8 @@ import { ChatComposer } from "./chat-composer";
 import { ChatMessageList, type ChatMessage } from "./chat-message-list";
 import { ChatSidebar, type ChatNavId, type WorkspaceDisplayMode } from "./chat-sidebar";
 import { ContactsBrowsePanel } from "./contacts-browse-panel";
+import { DashboardPanel } from "./dashboard-panel";
 import { DealsBrowsePanel } from "./deals-browse-panel";
-import { EmailsBrowsePanel } from "./emails-browse-panel";
 import { OrganisationsBrowsePanel } from "./organisations-browse-panel";
 import { RexTasksPanel } from "./rex-tasks-panel";
 import { UploadImportPanel } from "./upload-import-panel";
@@ -35,6 +39,7 @@ type ChatShellProps = {
   openingGreeting: string;
   stats: RexDashboardStats;
   workspace: WorkspaceLists;
+  metrics: DashboardMetrics;
 };
 
 function RexVoicePanel({
@@ -60,14 +65,21 @@ export function ChatShell({
   openingGreeting,
   stats,
   workspace,
+  metrics,
 }: ChatShellProps) {
-  const [activeNav, setActiveNav] = useState<ChatNavId>("ask");
+  const [activeNav, setActiveNav] = useState<ChatNavId>("dashboard");
   const [messages, setMessages] = useState<ChatMessage[]>(() => [
     { id: "rex-open", role: "rex", text: openingGreeting },
   ]);
   const [searchBusy, setSearchBusy] = useState(false);
   const [workspaceDisplayMode, setWorkspaceDisplayMode] =
     useState<WorkspaceDisplayMode>("live");
+  const [contactsCreateSignal, setContactsCreateSignal] = useState(0);
+
+  const onAddContactFromDashboard = useCallback(() => {
+    setActiveNav("contacts");
+    setContactsCreateSignal((n) => n + 1);
+  }, []);
 
   useEffect(() => {
     try {
@@ -93,6 +105,8 @@ export function ChatShell({
     workspaceDisplayMode === "empty" ? ZERO_STATS : stats;
   const effectiveWorkspace =
     workspaceDisplayMode === "empty" ? EMPTY_WORKSPACE : workspace;
+  const effectiveMetrics =
+    workspaceDisplayMode === "empty" ? ZERO_DASHBOARD_METRICS : metrics;
 
   const onSubmitSearch = useCallback(async (query: string) => {
     const userId =
@@ -191,7 +205,12 @@ export function ChatShell({
               : "flex min-h-0 flex-1 flex-col overflow-y-auto"
           }
         >
-          {activeNav === "ask" ? (
+          {activeNav === "dashboard" ? (
+            <DashboardPanel
+              metrics={effectiveMetrics}
+              onAddContact={onAddContactFromDashboard}
+            />
+          ) : activeNav === "ask" ? (
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
               <ChatMessageList messages={messages} />
               <div className="shrink-0">
@@ -202,7 +221,7 @@ export function ChatShell({
               </div>
             </div>
           ) : activeNav === "contacts" ? (
-            <ContactsBrowsePanel />
+            <ContactsBrowsePanel createSignal={contactsCreateSignal} />
           ) : activeNav === "organisations" ? (
             <OrganisationsBrowsePanel />
           ) : activeNav === "deal-canvas" ? (

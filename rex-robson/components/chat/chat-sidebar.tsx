@@ -3,6 +3,7 @@
 import {
   Building2,
   FileUp,
+  LayoutDashboard,
   LayoutGrid,
   ListTodo,
   MessageCircle,
@@ -11,6 +12,7 @@ import {
 } from "lucide-react";
 
 const navItems = [
+  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "ask", label: "Ask Rex", icon: MessageCircle },
   { id: "contacts", label: "Contacts", icon: Users },
   { id: "organisations", label: "Organisations", icon: Building2 },
@@ -41,7 +43,7 @@ function modeButtonClass(active: boolean) {
 }
 
 export function ChatSidebar({
-  activeId = "ask",
+  activeId = "dashboard",
   onNavigate,
   workspaceDisplayMode = "live",
   onWorkspaceDisplayModeChange,

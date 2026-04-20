@@ -79,7 +79,11 @@ const CONTACT_FORM_NEW_ORG_VALUE = "__new__";
 
 const CONTACT_TYPE_OPTIONS = ["Founder", "Investor", "Lender", "Other"] as const;
 
-export function ContactsBrowsePanel() {
+type ContactsBrowsePanelProps = {
+  createSignal?: number;
+};
+
+export function ContactsBrowsePanel({ createSignal }: ContactsBrowsePanelProps = {}) {
   const pageSize = WORKSPACE_CONTACTS_PAGE_SIZE_DEFAULT;
   const [queryInput, setQueryInput] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
@@ -227,7 +231,7 @@ export function ContactsBrowsePanel() {
     }
   }, [page, safePage]);
 
-  const openCreate = () => {
+  const openCreate = useCallback(() => {
     setFormMode("create");
     setEditingId(null);
     setDetailLoading(false);
@@ -245,7 +249,13 @@ export function ContactsBrowsePanel() {
     setNewNotes("");
     setFormError(null);
     setFormOpen(true);
-  };
+  }, []);
+
+  useEffect(() => {
+    if (createSignal && createSignal > 0) {
+      openCreate();
+    }
+  }, [createSignal, openCreate]);
 
   const openEdit = async (c: WorkspaceContactPageRow) => {
     setFormMode("edit");
