@@ -17,9 +17,25 @@ export type AnthropicDocumentBlock = {
   title?: string;
 };
 
+export type AnthropicImageMediaType =
+  | "image/jpeg"
+  | "image/png"
+  | "image/gif"
+  | "image/webp";
+
+export type AnthropicImageBlock = {
+  type: "image";
+  source: {
+    type: "base64";
+    media_type: AnthropicImageMediaType;
+    data: string;
+  };
+};
+
 export type AnthropicContentBlock =
   | AnthropicTextBlock
-  | AnthropicDocumentBlock;
+  | AnthropicDocumentBlock
+  | AnthropicImageBlock;
 
 export type AnthropicTextMessage = {
   role: AnthropicMessageRole;

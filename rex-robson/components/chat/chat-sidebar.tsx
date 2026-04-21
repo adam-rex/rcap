@@ -11,13 +11,13 @@ import {
 } from "lucide-react";
 
 const navItems = [
-  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { id: "ask", label: "Ask Rex", icon: MessageCircle },
-  { id: "contacts", label: "Contacts", icon: Users },
-  { id: "organisations", label: "Organisations", icon: Building2 },
-  { id: "deal-canvas", label: "Deal Canvas", icon: LayoutGrid },
-  { id: "tasks", label: "Tasks", icon: ListTodo },
-  { id: "suggestions", label: "Suggestions", icon: Sparkles },
+  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, hidden: false },
+  { id: "ask", label: "Ask Rex", icon: MessageCircle, hidden: false },
+  { id: "contacts", label: "Contacts", icon: Users, hidden: false },
+  { id: "organisations", label: "Organisations", icon: Building2, hidden: true },
+  { id: "deal-canvas", label: "Deal Canvas", icon: LayoutGrid, hidden: false },
+  { id: "tasks", label: "Tasks", icon: ListTodo, hidden: false },
+  { id: "suggestions", label: "Suggestions", icon: Sparkles, hidden: false },
 ] as const;
 
 export type ChatNavId = (typeof navItems)[number]["id"];
@@ -57,7 +57,8 @@ export function ChatSidebar({
         className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-hidden p-2"
         aria-label="Main"
       >
-        {navItems.map(({ id, label, icon: Icon }) => {
+        {navItems.map(({ id, label, icon: Icon, hidden }) => {
+          if (hidden) return null;
           const active = id === activeId;
           return (
             <button

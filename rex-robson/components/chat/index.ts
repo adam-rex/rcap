@@ -6,3 +6,5 @@ export {
   type ChatNavId,
   type WorkspaceDisplayMode,
 } from "./chat-sidebar";
+export { QuickCaptureDialog } from "./quick-capture-dialog";
+export { QuickCaptureFab } from "./quick-capture-fab";

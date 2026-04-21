@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import {
   ZERO_DASHBOARD_METRICS,
@@ -14,6 +15,8 @@ import { ContactsBrowsePanel } from "./contacts-browse-panel";
 import { DashboardPanel } from "./dashboard-panel";
 import { DealsBrowsePanel } from "./deals-browse-panel";
 import { OrganisationsBrowsePanel } from "./organisations-browse-panel";
+import { QuickCaptureDialog } from "./quick-capture-dialog";
+import { QuickCaptureFab } from "./quick-capture-fab";
 import { RexTasksPanel } from "./rex-tasks-panel";
 import { SuggestionsPanel } from "./suggestions-panel";
 
@@ -55,6 +58,8 @@ export function ChatShell({
     useState<WorkspaceDisplayMode>("live");
   const [pendingContactsAutoCreate, setPendingContactsAutoCreate] =
     useState(false);
+  const [quickCaptureOpen, setQuickCaptureOpen] = useState(false);
+  const router = useRouter();
 
   const onAddContactFromDashboard = useCallback(() => {
     setActiveNav("contacts");
@@ -63,6 +68,22 @@ export function ChatShell({
 
   const onContactsAutoCreateHandled = useCallback(() => {
     setPendingContactsAutoCreate(false);
+  }, []);
+
+  const onOpenQuickCapture = useCallback(() => {
+    setQuickCaptureOpen(true);
+  }, []);
+
+  const onCloseQuickCapture = useCallback(() => {
+    setQuickCaptureOpen(false);
+  }, []);
+
+  const onCaptured = useCallback(() => {
+    router.refresh();
+  }, [router]);
+
+  const onOpenSuggestionsFromCapture = useCallback(() => {
+    setActiveNav("suggestions");
   }, []);
 
   useEffect(() => {
@@ -212,6 +233,7 @@ export function ChatShell({
             <DashboardPanel
               metrics={effectiveMetrics}
               onAddContact={onAddContactFromDashboard}
+              onOpenQuickCapture={onOpenQuickCapture}
               onOpenSuggestions={() => setActiveNav("suggestions")}
             />
           ) : activeNav === "ask" ? (
@@ -243,6 +265,16 @@ export function ChatShell({
           ) : null}
         </main>
       </div>
+      <QuickCaptureFab
+        onClick={onOpenQuickCapture}
+        hidden={quickCaptureOpen}
+      />
+      <QuickCaptureDialog
+        open={quickCaptureOpen}
+        onClose={onCloseQuickCapture}
+        onCaptured={onCaptured}
+        onOpenSuggestions={onOpenSuggestionsFromCapture}
+      />
     </div>
   );
 }

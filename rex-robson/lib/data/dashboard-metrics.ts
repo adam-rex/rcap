@@ -6,6 +6,7 @@ import {
   type DashboardMetrics,
   type DealStage,
   type DealsByStage,
+  type SectorBreakdownEntry,
 } from "./dashboard-metrics.types";
 
 export { ZERO_DASHBOARD_METRICS, type DashboardMetrics };
@@ -45,7 +46,7 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
 
     const dealStageRowsReq = client
       .from("deals")
-      .select("deal_stage, size");
+      .select("deal_stage, size, sector, status");
 
     const suggestionsPendingReq = client
       .from("suggestions")
@@ -85,8 +86,16 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
     const dealsByStage: DealsByStage = { ...ZERO_DEALS_BY_STAGE };
     let matchingCount = 0;
     let matchingValue = 0;
+    const sectorAgg = new Map<string, { count: number; value: number }>();
+    let sectorUnknownCount = 0;
+    let sectorTotalCount = 0;
     for (const raw of stageRows ?? []) {
-      const row = raw as { deal_stage: string | null; size: number | null };
+      const row = raw as {
+        deal_stage: string | null;
+        size: number | null;
+        sector: string | null;
+        status: string | null;
+      };
       const stage = row.deal_stage;
       if (
         stage === "prospect" ||
@@ -102,7 +111,36 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
           }
         }
       }
+
+      // Sector breakdown is scoped to the open pipeline (mirrors the
+      // "open deal" metrics above): exclude passed/closed so the chart
+      // shows where active opportunity sits today.
+      const isOpen = row.status !== "passed" && row.status !== "closed";
+      if (!isOpen) continue;
+      sectorTotalCount += 1;
+      const sectorName = (row.sector ?? "").trim();
+      if (!sectorName) {
+        sectorUnknownCount += 1;
+        continue;
+      }
+      const size =
+        typeof row.size === "number" && Number.isFinite(row.size)
+          ? row.size
+          : 0;
+      const existing = sectorAgg.get(sectorName);
+      if (existing) {
+        existing.count += 1;
+        existing.value += size;
+      } else {
+        sectorAgg.set(sectorName, { count: 1, value: size });
+      }
     }
+
+    const dealsBySector: SectorBreakdownEntry[] = Array.from(sectorAgg.entries())
+      .map(([sector, { count, value }]) => ({ sector, count, value }))
+      .sort((a, b) =>
+        b.count !== a.count ? b.count - a.count : b.value - a.value,
+      );
 
     return {
       contactCount: contactCount ?? 0,
@@ -111,6 +149,9 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
       openPipelineValue,
       avgDealSize,
       dealsByStage,
+      dealsBySector,
+      sectorTotalCount,
+      sectorUnknownCount,
       matchingCount,
       matchingValue,
       suggestionsPendingCount: suggestionsPendingCount ?? 0,

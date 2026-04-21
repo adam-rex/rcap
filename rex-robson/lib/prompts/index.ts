@@ -38,6 +38,13 @@ export {
 export { SUGGESTIONS_SURFACE_SYSTEM } from "./suggestions";
 export { FILE_IMPORT_SURFACE_SYSTEM } from "./file-import";
 export { REX_PERSONA_CORE } from "./persona";
+export {
+  buildQuickCaptureSystemPrompt,
+  buildQuickCaptureTextUserContent,
+  buildQuickCaptureDocumentUserPreamble,
+  parseQuickCaptureDraft,
+  type QuickCaptureDraft,
+} from "./quick-capture";
 export type {
   AnthropicMessageRole,
   AnthropicTextMessage,

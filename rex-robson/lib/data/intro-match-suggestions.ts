@@ -319,6 +319,135 @@ export type GenerateIntroMatchesResult = {
   runMs: number;
 };
 
+export type IntroMatchForContact = {
+  suggestionId: string | null;
+  title: string;
+  reasons: string[];
+  counterpartyId: string;
+  counterpartyName: string;
+  counterpartySide: Side;
+  score: number;
+};
+
+const PER_CONTACT_DEFAULT_LIMIT = 3;
+
+async function fetchContactById(
+  client: SupabaseClient,
+  id: string,
+): Promise<ContactForMatch | null> {
+  const columns =
+    "id,name,contact_type,sector,sectors,role,deal_types,min_deal_size,max_deal_size,geography,relationship_score,last_contact_date";
+  const { data, error } = await client
+    .from("contacts")
+    .select(columns)
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return data as ContactForMatch;
+}
+
+/**
+ * Score and persist intro matches centred on a single contact (the one the
+ * user just captured). The contact plays whichever side its `contact_type`
+ * indicates; it's paired against the opposite pool only. Returns the top
+ * matches so the UI can render them inline after save.
+ */
+export async function generateIntroMatchesForContact(
+  client: SupabaseClient,
+  contactId: string,
+  limit: number = PER_CONTACT_DEFAULT_LIMIT,
+): Promise<IntroMatchForContact[]> {
+  const subject = await fetchContactById(client, contactId);
+  if (!subject) return [];
+  const side = contactSide(subject);
+  if (!side) return [];
+
+  const [allContacts, existingKeys] = await Promise.all([
+    fetchAllContactsForMatching(client),
+    loadExistingDedupeKeys(client),
+  ]);
+
+  const others = allContacts.filter((c) => c.id !== subject.id);
+  const candidates: Candidate[] = [];
+
+  if (side === "founder") {
+    for (const other of others) {
+      const otherSide = contactSide(other);
+      if (otherSide !== "investor" && otherSide !== "lender") continue;
+      const scored = scorePair(subject, other);
+      if (scored.score < MIN_SCORE) continue;
+      candidates.push({
+        founder: subject,
+        capital: other,
+        capitalSide: otherSide,
+        kind: otherSide === "investor" ? "founder_investor" : "founder_lender",
+        ...scored,
+      });
+    }
+  } else {
+    const capitalSide: CapitalSide = side;
+    for (const other of others) {
+      const otherSide = contactSide(other);
+      if (otherSide !== "founder") continue;
+      const scored = scorePair(other, subject);
+      if (scored.score < MIN_SCORE) continue;
+      candidates.push({
+        founder: other,
+        capital: subject,
+        capitalSide,
+        kind: capitalSide === "investor" ? "founder_investor" : "founder_lender",
+        ...scored,
+      });
+    }
+  }
+
+  candidates.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    const aWarm = Math.max(
+      a.founder.relationship_score ?? 0,
+      a.capital.relationship_score ?? 0,
+    );
+    const bWarm = Math.max(
+      b.founder.relationship_score ?? 0,
+      b.capital.relationship_score ?? 0,
+    );
+    return bWarm - aWarm;
+  });
+
+  const matches: IntroMatchForContact[] = [];
+  const cap = Math.max(1, Math.min(limit, 10));
+
+  for (const cand of candidates) {
+    if (matches.length >= cap) break;
+    const tag = dedupeTagForCandidate(cand);
+    const counterparty =
+      cand.founder.id === subject.id ? cand.capital : cand.founder;
+    const counterpartySide = contactSide(counterparty) ?? "founder";
+
+    let suggestionId: string | null = null;
+    if (!existingKeys.has(tag)) {
+      const title = buildSuggestionTitle(cand);
+      const body = buildSuggestionBody(cand);
+      const row = await insertWorkspaceSuggestion(client, { title, body });
+      suggestionId = row.id;
+      existingKeys.add(tag);
+    }
+
+    matches.push({
+      suggestionId,
+      title: buildSuggestionTitle(cand),
+      reasons: cand.reasons,
+      counterpartyId: counterparty.id,
+      counterpartyName: counterparty.name,
+      counterpartySide,
+      score: cand.score,
+    });
+  }
+
+  return matches;
+}
+
 /**
  * Creates pending suggestions for founder <> investor and founder <> lender
  * pairs that exceed the minimum match score. Ranks globally, then applies
