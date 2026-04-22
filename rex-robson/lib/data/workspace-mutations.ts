@@ -245,6 +245,21 @@ export async function fetchWorkspaceContactById(
   };
 }
 
+export async function deleteWorkspaceContact(
+  client: SupabaseClient,
+  id: string,
+): Promise<boolean> {
+  const { data, error } = await client
+    .from("contacts")
+    .delete()
+    .eq("id", id)
+    .select("id")
+    .maybeSingle();
+
+  if (error) throw error;
+  return data != null;
+}
+
 export async function updateWorkspaceContact(
   client: SupabaseClient,
   id: string,

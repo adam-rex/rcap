@@ -11,6 +11,7 @@ import {
   Phone,
   Plus,
   Tag,
+  Trash2,
   UserCircle2,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -29,6 +30,7 @@ type ContactDetailViewProps = {
   onBack: () => void;
   onEdit: () => void;
   onAdd: () => void;
+  onDeleted: () => void;
 };
 
 function initials(name: string) {
@@ -93,10 +95,45 @@ export function ContactDetailView({
   onBack,
   onEdit,
   onAdd,
+  onDeleted,
 }: ContactDetailViewProps) {
   const [detail, setDetail] = useState<ContactDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const handleDelete = async () => {
+    if (deleting) return;
+    const confirmed = window.confirm(
+      `Delete ${contact.name}? This cannot be undone.`,
+    );
+    if (!confirmed) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/workspace/contacts/${contact.id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const data = (await res
+          .json()
+          .catch(() => ({}))) as { error?: string; hint?: string };
+        const parts = [data.error, data.hint].filter(
+          (x): x is string => typeof x === "string" && x.length > 0,
+        );
+        setDeleteError(
+          parts.length > 0 ? parts.join(" ") : "Could not delete contact.",
+        );
+        setDeleting(false);
+        return;
+      }
+      onDeleted();
+    } catch {
+      setDeleteError("Network error while deleting contact.");
+      setDeleting(false);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -170,8 +207,23 @@ export function ContactDetailView({
             <Pencil className="size-3.5" aria-hidden />
             Edit contact
           </button>
+          <button
+            type="button"
+            onClick={() => void handleDelete()}
+            disabled={deleting}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-red-700/20 bg-cream px-3 py-2 text-xs font-medium text-red-700 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Trash2 className="size-3.5" aria-hidden />
+            {deleting ? "Deleting…" : "Delete contact"}
+          </button>
         </div>
       </div>
+
+      {deleteError ? (
+        <p className="mt-3 text-sm text-red-700/90" role="alert">
+          {deleteError}
+        </p>
+      ) : null}
 
       <div className="mt-4 flex items-center gap-4 rounded-xl border border-charcoal/[0.08] bg-cream-light/60 p-5">
         <div className="flex size-14 shrink-0 items-center justify-center rounded-full bg-sky-100 text-sm font-semibold text-sky-800">

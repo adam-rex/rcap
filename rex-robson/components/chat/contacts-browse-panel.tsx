@@ -750,6 +750,10 @@ export function ContactsBrowsePanel({
           onBack={() => setDetailContact(null)}
           onEdit={() => void openEdit(detailContact)}
           onAdd={openCreate}
+          onDeleted={() => {
+            setDetailContact(null);
+            setReloadTick((n) => n + 1);
+          }}
         />
         {dialogNode}
       </>

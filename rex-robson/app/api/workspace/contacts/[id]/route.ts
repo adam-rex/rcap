@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { parseContactUpsertBody } from "@/lib/api/workspace-entity-bodies";
 import { isValidUuid, readJsonObject } from "@/lib/api/workspace-post-parse";
 import {
+  deleteWorkspaceContact,
   fetchWorkspaceContactById,
   getWorkspaceWriteClient,
   updateWorkspaceContact,
@@ -84,6 +85,35 @@ export async function PATCH(req: Request, context: RouteContext) {
         error: message,
         hint:
           "If organisationId is set, it must exist. For local dev, set SUPABASE_SERVICE_ROLE_KEY or sign in.",
+      },
+      { status: 503 },
+    );
+  }
+}
+
+export async function DELETE(_req: Request, context: RouteContext) {
+  const { id } = await context.params;
+  if (!isValidUuid(id)) {
+    return NextResponse.json({ error: "Invalid id" }, { status: 400 });
+  }
+
+  try {
+    const client = await getWorkspaceWriteClient();
+    const removed = await deleteWorkspaceContact(client, id);
+    if (!removed) {
+      return NextResponse.json({ error: "Contact not found" }, { status: 404 });
+    }
+    return NextResponse.json({ id, deleted: true });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Delete failed";
+    if (process.env.NODE_ENV === "development") {
+      console.error("[rex-robson] DELETE /api/workspace/contacts/[id]:", e);
+    }
+    return NextResponse.json(
+      {
+        error: message,
+        hint:
+          "Set SUPABASE_SERVICE_ROLE_KEY or sign in. Foreign key references should be set null automatically.",
       },
       { status: 503 },
     );
