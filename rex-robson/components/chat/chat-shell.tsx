@@ -13,11 +13,10 @@ import { ChatMessageList, type ChatMessage } from "./chat-message-list";
 import { ChatSidebar, type ChatNavId, type WorkspaceDisplayMode } from "./chat-sidebar";
 import { ContactsBrowsePanel } from "./contacts-browse-panel";
 import { DashboardPanel } from "./dashboard-panel";
-import { DealsBrowsePanel } from "./deals-browse-panel";
 import { OrganisationsBrowsePanel } from "./organisations-browse-panel";
+import { PipelinePanel } from "./pipeline-panel";
 import { QuickCaptureDialog } from "./quick-capture-dialog";
 import { QuickCaptureFab } from "./quick-capture-fab";
-import { RexTasksPanel } from "./rex-tasks-panel";
 import { SuggestionsPanel } from "./suggestions-panel";
 
 const WORKSPACE_DISPLAY_KEY = "rex-workspace-display";
@@ -253,10 +252,8 @@ export function ChatShell({
             />
           ) : activeNav === "organisations" ? (
             <OrganisationsBrowsePanel />
-          ) : activeNav === "deal-canvas" ? (
-            <DealsBrowsePanel />
-          ) : activeNav === "tasks" ? (
-            <RexTasksPanel />
+          ) : activeNav === "pipeline" ? (
+            <PipelinePanel />
           ) : activeNav === "suggestions" ? (
             <SuggestionsPanel
               rows={effectiveWorkspace.suggestions}

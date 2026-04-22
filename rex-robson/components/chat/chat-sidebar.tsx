@@ -4,7 +4,6 @@ import {
   Building2,
   LayoutDashboard,
   LayoutGrid,
-  ListTodo,
   MessageCircle,
   Sparkles,
   Users,
@@ -15,8 +14,7 @@ const navItems = [
   { id: "ask", label: "Ask Rex", icon: MessageCircle, hidden: false },
   { id: "contacts", label: "Contacts", icon: Users, hidden: false },
   { id: "organisations", label: "Organisations", icon: Building2, hidden: true },
-  { id: "deal-canvas", label: "Deal Canvas", icon: LayoutGrid, hidden: false },
-  { id: "tasks", label: "Tasks", icon: ListTodo, hidden: false },
+  { id: "pipeline", label: "Pipeline", icon: LayoutGrid, hidden: false },
   { id: "suggestions", label: "Suggestions", icon: Sparkles, hidden: false },
 ] as const;
 

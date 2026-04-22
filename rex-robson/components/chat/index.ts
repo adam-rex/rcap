@@ -6,5 +6,6 @@ export {
   type ChatNavId,
   type WorkspaceDisplayMode,
 } from "./chat-sidebar";
+export { PipelinePanel } from "./pipeline-panel";
 export { QuickCaptureDialog } from "./quick-capture-dialog";
 export { QuickCaptureFab } from "./quick-capture-fab";
