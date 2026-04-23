@@ -207,7 +207,7 @@ export function RexTasksPanel() {
           ) : rows.length === 0 ? (
             <p className="mt-2 text-sm text-charcoal-light">
               No Rex tasks queued yet. As meeting notes are imported, Rex can run
-              agent-side tasks while people/deal/follow-up items are kept in Suggestions.
+              agent-side tasks while people/match/follow-up items are kept in Suggestions.
             </p>
           ) : (
             <ul className="mt-3 flex flex-col gap-2">

@@ -142,7 +142,7 @@ export function buildSearchPatternsFromQuery(query: string): string[] {
 /** Heuristic: open-ended workspace questions where a literal full-string scan often returns nothing. */
 export function looksLikeExploratoryWorkspaceQuery(query: string): boolean {
   const s = query.toLowerCase();
-  return /match|suggest|intro|founder|investor|pair|recommend|network|opportunit|who\s+should|deal(s)?\s+to\s+match|any\s+deal|connections?|introduce/.test(
+  return /match|suggest|intro|founder|investor|pair|recommend|network|opportunit|who\s+should|connections?|introduce/.test(
     s,
   );
 }
@@ -212,7 +212,7 @@ export async function fetchOrganisationsByPatterns(
   >[];
 }
 
-export async function fetchDealsByPatterns(
+export async function fetchMatchesByPatterns(
   supabase: SupabaseClient,
   patterns: string[],
   limit: number,
@@ -221,7 +221,7 @@ export async function fetchDealsByPatterns(
   const slice = patterns.slice(0, MAX_BASELINE_PATTERNS);
   if (slice.length === 0) return [];
   const batches = await Promise.all(
-    slice.map((p) => fetchDealsByPattern(supabase, p, cap)),
+    slice.map((p) => fetchMatchesByPattern(supabase, p, cap)),
   );
   return take(uniqueById(batches.flat() as { id: string }[]), cap) as Record<
     string,
@@ -275,46 +275,25 @@ export async function fetchOrganisationsByPattern(
   ) as Record<string, unknown>[];
 }
 
-export async function fetchDealsByPattern(
+const MATCH_SELECT =
+  "id,kind,stage,outcome,context,notes," +
+  "contact_a:contacts!matches_contact_a_id_fkey(id,name,sector)," +
+  "contact_b:contacts!matches_contact_b_id_fkey(id,name,sector)";
+
+export async function fetchMatchesByPattern(
   supabase: SupabaseClient,
   pattern: string,
   limit: number,
 ): Promise<Record<string, unknown>[]> {
   const cap = Math.min(Math.max(1, limit), 25);
-  const [dt, dn, ds, dst, ddt] = await Promise.all([
-    supabase
-      .from("deals")
-      .select("id,title,size,deal_type,sector,structure,status,notes")
-      .ilike("title", pattern)
-      .limit(cap),
-    supabase
-      .from("deals")
-      .select("id,title,size,deal_type,sector,structure,status,notes")
-      .ilike("notes", pattern)
-      .limit(cap),
-    supabase
-      .from("deals")
-      .select("id,title,size,deal_type,sector,structure,status,notes")
-      .ilike("sector", pattern)
-      .limit(cap),
-    supabase
-      .from("deals")
-      .select("id,title,size,deal_type,sector,structure,status,notes")
-      .ilike("structure", pattern)
-      .limit(cap),
-    supabase
-      .from("deals")
-      .select("id,title,size,deal_type,sector,structure,status,notes")
-      .ilike("deal_type", pattern)
-      .limit(cap),
+  const [ctx, notes] = await Promise.all([
+    supabase.from("matches").select(MATCH_SELECT).ilike("context", pattern).limit(cap),
+    supabase.from("matches").select(MATCH_SELECT).ilike("notes", pattern).limit(cap),
   ]);
   return take(
     uniqueById([
-      ...(dt.data ?? []),
-      ...(dn.data ?? []),
-      ...(ds.data ?? []),
-      ...(dst.data ?? []),
-      ...(ddt.data ?? []),
+      ...((ctx.data ?? []) as unknown as { id: string }[]),
+      ...((notes.data ?? []) as unknown as { id: string }[]),
     ]),
     cap,
   ) as Record<string, unknown>[];
@@ -362,16 +341,16 @@ export async function fetchRecentContactsPreview(
   return (data ?? []) as Record<string, unknown>[];
 }
 
-export async function fetchRecentDealsPreview(
+export async function fetchRecentMatchesPreview(
   supabase: SupabaseClient,
   limit: number,
 ): Promise<Record<string, unknown>[]> {
   const cap = Math.min(Math.max(1, limit), 25);
   const { data, error } = await supabase
-    .from("deals")
-    .select("id,title,size,deal_type,sector,structure,status,notes")
-    .order("created_at", { ascending: false })
+    .from("matches")
+    .select(MATCH_SELECT)
+    .order("updated_at", { ascending: false })
     .limit(cap);
   if (error) throw error;
-  return (data ?? []) as Record<string, unknown>[];
+  return (data ?? []) as unknown as Record<string, unknown>[];
 }

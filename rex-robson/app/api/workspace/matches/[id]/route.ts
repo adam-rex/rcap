@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { parseDealUpsertBody } from "@/lib/api/workspace-entity-bodies";
+import { parseMatchUpsertBody } from "@/lib/api/workspace-entity-bodies";
 import { isValidUuid, readJsonObject } from "@/lib/api/workspace-post-parse";
 import {
-  fetchWorkspaceDealById,
+  fetchWorkspaceMatchById,
   getWorkspaceWriteClient,
-  insertDealStageHistory,
-  listDealStageHistory,
-  updateWorkspaceDeal,
+  insertMatchStageHistory,
+  listMatchStageHistory,
+  updateWorkspaceMatch,
 } from "@/lib/data/workspace-mutations";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -19,27 +19,27 @@ export async function GET(_req: Request, context: RouteContext) {
 
   try {
     const client = await getWorkspaceWriteClient();
-    const row = await fetchWorkspaceDealById(client, id);
+    const row = await fetchWorkspaceMatchById(client, id);
     if (!row) {
-      return NextResponse.json({ error: "Deal not found" }, { status: 404 });
+      return NextResponse.json({ error: "Match not found" }, { status: 404 });
     }
-    const stageHistory = await listDealStageHistory(client, id);
+    const stageHistory = await listMatchStageHistory(client, id);
     return NextResponse.json({
       id: row.id,
-      title: row.title,
-      size: row.size,
-      dealType: row.deal_type,
-      dealStage: row.deal_stage,
-      sector: row.sector,
-      structure: row.structure,
-      status: row.status,
+      contactAId: row.contact_a_id,
+      contactBId: row.contact_b_id,
+      kind: row.kind,
+      stage: row.stage,
+      outcome: row.outcome,
+      context: row.context,
       notes: row.notes,
+      suggestionId: row.suggestion_id,
       stageHistory,
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Query failed";
     if (process.env.NODE_ENV === "development") {
-      console.error("[rex-robson] GET /api/workspace/deals/[id]:", e);
+      console.error("[rex-robson] GET /api/workspace/matches/[id]:", e);
     }
     return NextResponse.json({ error: message }, { status: 503 });
   }
@@ -55,42 +55,39 @@ export async function PATCH(req: Request, context: RouteContext) {
   if (!parsed.ok) {
     return NextResponse.json({ error: parsed.error }, { status: 400 });
   }
-  const fields = parseDealUpsertBody(parsed.body);
+  const fields = parseMatchUpsertBody(parsed.body);
   if (!fields.ok) {
     return NextResponse.json({ error: fields.error }, { status: 400 });
   }
 
   try {
     const client = await getWorkspaceWriteClient();
-    const existing = await fetchWorkspaceDealById(client, id);
+    const existing = await fetchWorkspaceMatchById(client, id);
     if (!existing) {
-      return NextResponse.json({ error: "Deal not found" }, { status: 404 });
+      return NextResponse.json({ error: "Match not found" }, { status: 404 });
     }
-    const row = await updateWorkspaceDeal(client, id, {
-      title: fields.value.title,
-      size: fields.value.size,
-      deal_type: fields.value.dealType,
-      deal_stage: fields.value.dealStage,
-      sector: fields.value.sector,
-      structure: fields.value.structure,
-      status: fields.value.status,
+    const row = await updateWorkspaceMatch(client, id, {
+      kind: fields.value.kind,
+      stage: fields.value.stage,
+      outcome: fields.value.outcome,
+      context: fields.value.context,
       notes: fields.value.notes,
     });
     if (!row) {
-      return NextResponse.json({ error: "Deal not found" }, { status: 404 });
+      return NextResponse.json({ error: "Match not found" }, { status: 404 });
     }
-    if (existing.deal_stage !== row.deal_stage) {
-      await insertDealStageHistory(client, {
-        deal_id: id,
-        from_stage: existing.deal_stage,
-        to_stage: row.deal_stage,
+    if (existing.stage !== row.stage) {
+      await insertMatchStageHistory(client, {
+        match_id: id,
+        from_stage: existing.stage,
+        to_stage: row.stage,
       });
     }
     return NextResponse.json(row);
   } catch (e) {
     const message = e instanceof Error ? e.message : "Update failed";
     if (process.env.NODE_ENV === "development") {
-      console.error("[rex-robson] PATCH /api/workspace/deals/[id]:", e);
+      console.error("[rex-robson] PATCH /api/workspace/matches/[id]:", e);
     }
     return NextResponse.json(
       {

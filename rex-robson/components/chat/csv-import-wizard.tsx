@@ -24,8 +24,8 @@ const REX_TARGETS = [
   { id: "organisation", label: "Organisation" },
   { id: "role", label: "Role" },
   {
-    id: "notes_deal_prefs",
-    label: "Rex will extract deal prefs from this",
+    id: "notes_match_prefs",
+    label: "Rex will extract match prefs from this",
   },
   { id: "skip", label: "Skip / enrich later" },
 ] as const;
@@ -82,7 +82,7 @@ function guessTarget(header: string): RexTargetId {
     return "role";
   }
   if (/note|comment|memo|description|details/.test(h)) {
-    return "notes_deal_prefs";
+    return "notes_match_prefs";
   }
   if (/linkedin|url|website|link/.test(h)) {
     return "skip";

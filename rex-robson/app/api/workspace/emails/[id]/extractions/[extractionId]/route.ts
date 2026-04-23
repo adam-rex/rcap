@@ -73,7 +73,6 @@ export async function PATCH(req: Request, context: RouteContext) {
       result: {
         createdContactId: res.result.createdContactId,
         createdOrganisationId: res.result.createdOrganisationId,
-        createdDealId: res.result.createdDealId,
         createdSuggestionId: res.result.createdSuggestionId,
       },
     });

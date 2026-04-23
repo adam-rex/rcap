@@ -1,9 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { RexEmailExtractionKind } from "@/lib/data/workspace-emails.types";
 import {
-  insertDealStageHistory,
   insertWorkspaceContact,
-  insertWorkspaceDeal,
   insertWorkspaceOrganisation,
   insertWorkspaceSuggestion,
   touchWorkspaceContactLastContactDate,
@@ -17,15 +15,6 @@ function optStr(v: unknown): string | null {
   if (v == null) return null;
   const s = String(v).trim();
   return s === "" ? null : s;
-}
-
-function optNum(v: unknown): number | null {
-  if (typeof v === "number" && Number.isFinite(v)) return v;
-  if (typeof v === "string") {
-    const n = Number.parseFloat(v);
-    return Number.isFinite(n) ? n : null;
-  }
-  return null;
 }
 
 function mergePayload(
@@ -64,7 +53,6 @@ export async function fetchPendingExtractionForEmail(
   if (
     kind !== "contact" &&
     kind !== "organisation" &&
-    kind !== "deal_signal" &&
     kind !== "intro_request"
   ) {
     return null;
@@ -87,7 +75,6 @@ export async function fetchPendingExtractionForEmail(
 type ApplyResult = {
   createdContactId: string | null;
   createdOrganisationId: string | null;
-  createdDealId: string | null;
   createdSuggestionId: string | null;
 };
 
@@ -103,7 +90,6 @@ async function markApplied(
       applied_at: new Date().toISOString(),
       created_contact_id: ids.createdContactId,
       created_organisation_id: ids.createdOrganisationId,
-      created_deal_id: ids.createdDealId,
       created_suggestion_id: ids.createdSuggestionId,
     })
     .eq("id", extractionId)
@@ -155,7 +141,6 @@ export async function applyRexEmailExtraction(
   const empty: ApplyResult = {
     createdContactId: null,
     createdOrganisationId: null,
-    createdDealId: null,
     createdSuggestionId: null,
   };
 
@@ -241,35 +226,6 @@ export async function applyRexEmailExtraction(
           result: { ...empty, createdOrganisationId: org.id },
         };
       }
-      case "deal_signal": {
-        const title = str(p.title).trim();
-        if (!title) {
-          return { ok: false, error: "Deal title is required." };
-        }
-        const deal = await insertWorkspaceDeal(client, {
-          title,
-          size: optNum(p.size),
-          deal_type: optStr(p.dealType),
-          deal_stage: "prospect",
-          sector: optStr(p.sector),
-          structure: optStr(p.structure),
-          status: optStr(p.status) ?? "live",
-          notes: optStr(p.notes),
-        });
-        await insertDealStageHistory(client, {
-          deal_id: deal.id,
-          from_stage: null,
-          to_stage: deal.deal_stage,
-        });
-        await markApplied(client, params.extractionId, {
-          ...empty,
-          createdDealId: deal.id,
-        });
-        return {
-          ok: true,
-          result: { ...empty, createdDealId: deal.id },
-        };
-      }
       case "intro_request": {
         const title =
           optStr(p.title) ?? optStr(p.summary) ?? "Introduction request";
@@ -278,6 +234,12 @@ export async function applyRexEmailExtraction(
           title,
           body,
         });
+        if (!sug) {
+          return {
+            ok: false,
+            error: "A pending suggestion already exists for this pair.",
+          };
+        }
         await markApplied(client, params.extractionId, {
           ...empty,
           createdSuggestionId: sug.id,

@@ -8,9 +8,9 @@ The user is importing one or more files into their workspace (PDF, DOCX, CSV, TX
 
 1) **Ingest** — Treat the provided text (or transcribed structure) as the only source of truth. If content is missing, truncated, or unreadable, say so plainly; do not fabricate rows or fields.
 
-2) **Classify intent** — Infer what the file is for: e.g. contact lists, meeting notes, lender criteria, org profiles, deal updates, or mixed. It is fine to say "unclear" and ask one sharp clarifying question.
+2) **Classify intent** — Infer what the file is for: e.g. contact lists, meeting notes, lender criteria, org profiles, or mixed. It is fine to say "unclear" and ask one sharp clarifying question.
 
-3) **Extract** — Pull concrete, actionable entities and updates: contacts (name, email, role, org), organisations, deal fields, criteria bullets, follow-ups, etc. Prefer structured lists over prose.
+3) **Extract** — Pull concrete, actionable entities and updates: contacts (name, email, role, org), organisations, criteria bullets, follow-ups, etc. Prefer structured lists over prose.
 
 4) **Propose, do not apply** — Surface findings as **suggestions** or staged changes the user must confirm. Never claim data was saved unless a tool/API explicitly succeeded after confirmation.
 

@@ -39,15 +39,15 @@ function mapListRow(
 
 function mapExtractionRow(
   r: Record<string, unknown>,
-): WorkspaceEmailExtractionListItem {
+): WorkspaceEmailExtractionListItem | null {
   const kindRaw = r.kind;
-  const kind =
-    kindRaw === "contact" ||
-    kindRaw === "organisation" ||
-    kindRaw === "deal_signal" ||
-    kindRaw === "intro_request"
-      ? kindRaw
-      : "contact";
+  if (
+    kindRaw !== "contact" &&
+    kindRaw !== "organisation" &&
+    kindRaw !== "intro_request"
+  ) {
+    return null;
+  }
   const statusRaw = r.status;
   const status =
     statusRaw === "pending" ||
@@ -64,7 +64,7 @@ function mapExtractionRow(
       : {};
   return {
     id: String(r.id ?? ""),
-    kind,
+    kind: kindRaw,
     status,
     title: String(r.title ?? ""),
     summary: r.summary == null ? null : String(r.summary),
@@ -76,8 +76,6 @@ function mapExtractionRow(
       r.created_organisation_id == null
         ? null
         : String(r.created_organisation_id),
-    createdDealId:
-      r.created_deal_id == null ? null : String(r.created_deal_id),
     createdSuggestionId:
       r.created_suggestion_id == null
         ? null
@@ -240,7 +238,7 @@ export async function fetchWorkspaceEmailDetailWithClient(
   const { data: extRows, error: e3 } = await client
     .from("rex_email_extractions")
     .select(
-      "id,kind,status,title,summary,detail,payload,created_contact_id,created_organisation_id,created_deal_id,created_suggestion_id",
+      "id,kind,status,title,summary,detail,payload,created_contact_id,created_organisation_id,created_suggestion_id",
     )
     .eq("email_id", id)
     .order("created_at", { ascending: true });
@@ -252,7 +250,9 @@ export async function fetchWorkspaceEmailDetailWithClient(
   )
     ? extRows
     : []
-  ).map((x) => mapExtractionRow(x as Record<string, unknown>));
+  )
+    .map((x) => mapExtractionRow(x as Record<string, unknown>))
+    .filter((x): x is WorkspaceEmailExtractionListItem => x !== null);
 
   const tpc = row.thread_participant_count;
   let threadParticipantCount: number | null = null;

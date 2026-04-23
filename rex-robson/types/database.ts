@@ -24,18 +24,24 @@ export type Contact = {
   embedding: string | null;
 };
 
-export type Deal = {
+export type MatchKind = "founder_investor" | "founder_lender";
+
+export type MatchStage = "introduced" | "active" | "closed";
+
+export type MatchOutcome = "won" | "lost" | "passed";
+
+export type Match = {
   id: string;
-  title: string;
-  size: number | null;
-  deal_type: string | null;
-  deal_stage: "prospect" | "active" | "matching" | "closed";
-  sector: string | null;
-  structure: string | null;
-  status: string | null;
+  contact_a_id: string;
+  contact_b_id: string;
+  kind: MatchKind;
+  stage: MatchStage;
+  outcome: MatchOutcome | null;
+  context: string | null;
   notes: string | null;
+  suggestion_id: string | null;
   created_at: string;
-  embedding: string | null;
+  updated_at: string;
 };
 
 export type Suggestion = {
@@ -43,5 +49,9 @@ export type Suggestion = {
   title: string | null;
   body: string | null;
   status: "pending" | "dismissed" | "acted";
+  contact_a_id: string | null;
+  contact_b_id: string | null;
+  kind: MatchKind | null;
+  score: number | null;
   created_at: string;
 };

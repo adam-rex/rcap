@@ -1312,7 +1312,7 @@ function SavedState({
               aria-hidden
             />
             <p className="text-[11px] font-medium uppercase tracking-wide text-charcoal-light/80">
-              Rex thinks you could run these deals with {saved.name}
+              Rex thinks you could introduce these matches with {saved.name}
             </p>
           </div>
           <ul className="mt-3 flex flex-col gap-2">
@@ -1350,7 +1350,7 @@ function SavedState({
       ) : (
         <div className="rounded-xl border border-dashed border-charcoal/15 bg-cream-light/40 p-3 text-center">
           <p className="text-xs text-charcoal-light/90">
-            No strong deal matches for {saved.name} yet — Rex will keep an eye
+            No strong intro matches for {saved.name} yet — Rex will keep an eye
             out as your workspace grows.
           </p>
         </div>

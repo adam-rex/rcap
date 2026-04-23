@@ -27,8 +27,6 @@ function kindLabel(kind: WorkspaceEmailExtractionListItem["kind"]): string {
       return "Contact";
     case "organisation":
       return "Organisation";
-    case "deal_signal":
-      return "Deal signal";
     case "intro_request":
       return "Intro request";
     default:
@@ -42,8 +40,6 @@ function kindBadgeClass(kind: WorkspaceEmailExtractionListItem["kind"]): string 
       return "bg-sky-100 text-sky-950";
     case "organisation":
       return "bg-violet-100 text-violet-950";
-    case "deal_signal":
-      return "bg-emerald-100 text-emerald-950";
     case "intro_request":
       return "bg-amber-100 text-amber-950";
     default:
@@ -261,17 +257,11 @@ function ExtractionCard({
     role: String(p.role ?? ""),
     geography: String(p.geography ?? ""),
     notes: String(p.notes ?? ""),
-    title: String(p.title ?? x.title ?? ""),
-    size: p.size != null ? String(p.size) : "",
-    sector: String(p.sector ?? ""),
-    structure: String(p.structure ?? ""),
     orgName: String(p.name ?? x.title ?? ""),
     orgType: String(p.type ?? ""),
     orgDescription: String(p.description ?? ""),
     introTitle: String(p.title ?? x.title ?? "Introduction request"),
-    introBody: String(
-      p.body ?? p.detail ?? p.context ?? x.summary ?? "",
-    ),
+    introBody: String(p.body ?? p.detail ?? p.context ?? x.summary ?? ""),
   }));
 
   const isDone = x.status !== "pending";
@@ -285,14 +275,6 @@ function ExtractionCard({
           organisationName: draft.organisationName.trim() || undefined,
           role: draft.role.trim() || undefined,
           geography: draft.geography.trim() || undefined,
-          notes: draft.notes.trim() || undefined,
-        };
-      case "deal_signal":
-        return {
-          title: draft.title.trim(),
-          size: draft.size.trim() === "" ? undefined : Number(draft.size),
-          sector: draft.sector.trim() || undefined,
-          structure: draft.structure.trim() || undefined,
           notes: draft.notes.trim() || undefined,
         };
       case "organisation":
@@ -343,7 +325,6 @@ function ExtractionCard({
           {[
             x.createdContactId ? "Saved to contacts." : null,
             x.createdOrganisationId ? "Organisation added." : null,
-            x.createdDealId ? "Deal added to pipeline." : null,
             x.createdSuggestionId ? "Added to suggestions." : null,
           ]
             .filter(Boolean)
@@ -406,52 +387,6 @@ function ExtractionCard({
               <strong>last contact date</strong> from this email (
               {new Date(receivedAt).toLocaleDateString()}).
             </p>
-          ) : null}
-          {x.kind === "deal_signal" ? (
-            <>
-              <Field
-                id={`${x.id}-dtitle`}
-                label="Deal title"
-                value={draft.title}
-                onChange={(v) => setDraft((d) => ({ ...d, title: v }))}
-              />
-              <Field
-                id={`${x.id}-size`}
-                label="Size (numeric)"
-                value={draft.size}
-                onChange={(v) => setDraft((d) => ({ ...d, size: v }))}
-                inputMode="decimal"
-              />
-              <Field
-                id={`${x.id}-sector`}
-                label="Sector"
-                value={draft.sector}
-                onChange={(v) => setDraft((d) => ({ ...d, sector: v }))}
-              />
-              <Field
-                id={`${x.id}-structure`}
-                label="Structure"
-                value={draft.structure}
-                onChange={(v) => setDraft((d) => ({ ...d, structure: v }))}
-              />
-              <div>
-                <label
-                  htmlFor={`${x.id}-dnotes`}
-                  className={WORKSPACE_FORM_LABEL_CLASS}
-                >
-                  Notes
-                </label>
-                <textarea
-                  id={`${x.id}-dnotes`}
-                  value={draft.notes}
-                  onChange={(e) =>
-                    setDraft((d) => ({ ...d, notes: e.target.value }))
-                  }
-                  rows={2}
-                  className={`${WORKSPACE_FORM_INPUT_CLASS} resize-y`}
-                />
-              </div>
-            </>
           ) : null}
           {x.kind === "organisation" ? (
             <>
@@ -588,39 +523,6 @@ function ExtractionCard({
                 className={WORKSPACE_FORM_BTN_PRIMARY}
               >
                 Add organisation
-              </button>
-            </>
-          ) : null}
-          {x.kind === "deal_signal" ? (
-            <>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => void onPatch(x.id, { action: "dismiss" })}
-                className={WORKSPACE_FORM_BTN_SECONDARY}
-              >
-                Ignore
-              </button>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={onToggleEdit}
-                className={WORKSPACE_FORM_BTN_SECONDARY}
-              >
-                {editing ? "Close edit" : "Edit"}
-              </button>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() =>
-                  void onPatch(x.id, {
-                    action: "apply",
-                    payload: applyPayload(),
-                  })
-                }
-                className={WORKSPACE_FORM_BTN_PRIMARY}
-              >
-                Add to pipeline
               </button>
             </>
           ) : null}

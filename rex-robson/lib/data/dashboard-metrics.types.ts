@@ -1,46 +1,43 @@
-export type DealStage = "prospect" | "active" | "matching" | "closed";
+export type MatchStage = "introduced" | "active" | "closed";
 
-export type DealsByStage = Record<DealStage, number>;
+export type MatchesByStage = Record<MatchStage, number>;
 
 export type SectorBreakdownEntry = {
   sector: string;
   count: number;
+  /** Reserved for future per-sector value math; kept for chart compatibility. */
   value: number;
 };
 
 export type DashboardMetrics = {
   contactCount: number;
   contactsNew30d: number;
-  openDealCount: number;
-  openPipelineValue: number;
-  avgDealSize: number | null;
-  dealsByStage: DealsByStage;
-  dealsBySector: SectorBreakdownEntry[];
+  /** Open = stage in (introduced, active). */
+  openMatchCount: number;
+  matchesByStage: MatchesByStage;
+  matchesBySector: SectorBreakdownEntry[];
   sectorTotalCount: number;
   sectorUnknownCount: number;
-  matchingCount: number;
-  matchingValue: number;
-  suggestionsPendingCount: number;
+  /** stage='active' tile. */
+  activeMatchesCount: number;
+  /** suggestions.status='pending' tile. */
+  pendingSuggestionsCount: number;
 };
 
-export const ZERO_DEALS_BY_STAGE: DealsByStage = {
-  prospect: 0,
+export const ZERO_MATCHES_BY_STAGE: MatchesByStage = {
+  introduced: 0,
   active: 0,
-  matching: 0,
   closed: 0,
 };
 
 export const ZERO_DASHBOARD_METRICS: DashboardMetrics = {
   contactCount: 0,
   contactsNew30d: 0,
-  openDealCount: 0,
-  openPipelineValue: 0,
-  avgDealSize: null,
-  dealsByStage: { ...ZERO_DEALS_BY_STAGE },
-  dealsBySector: [],
+  openMatchCount: 0,
+  matchesByStage: { ...ZERO_MATCHES_BY_STAGE },
+  matchesBySector: [],
   sectorTotalCount: 0,
   sectorUnknownCount: 0,
-  matchingCount: 0,
-  matchingValue: 0,
-  suggestionsPendingCount: 0,
+  activeMatchesCount: 0,
+  pendingSuggestionsCount: 0,
 };

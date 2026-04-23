@@ -1,12 +1,11 @@
 "use client";
 
 import {
-  Briefcase,
+  Handshake,
   Mic,
   Pencil,
   PieChart,
   Plus,
-  PoundSterling,
   Sparkles,
   Target,
   Upload,
@@ -14,7 +13,7 @@ import {
 } from "lucide-react";
 import type {
   DashboardMetrics,
-  DealStage,
+  MatchStage,
   SectorBreakdownEntry,
 } from "@/lib/data/dashboard-metrics.types";
 
@@ -24,13 +23,6 @@ type DashboardPanelProps = {
   onOpenQuickCapture?: () => void;
   onOpenSuggestions?: () => void;
 };
-
-function formatGbp(value: number): string {
-  if (!Number.isFinite(value)) return "£0";
-  if (value >= 1_000_000) return `£${(Math.round(value / 100_000) / 10).toLocaleString()}M`;
-  if (value >= 1_000) return `£${(Math.round(value / 100) / 10).toLocaleString()}K`;
-  return `£${Math.round(value).toLocaleString()}`;
-}
 
 function formatCount(value: number): string {
   return value.toLocaleString();
@@ -54,49 +46,46 @@ function MetricCard({ label, value, subline, icon }: MetricCardProps) {
           {icon}
         </span>
       </div>
-      <p className="font-serif text-4xl tracking-tight text-charcoal">{value}</p>
+      <p className="font-serif text-4xl tracking-tight text-charcoal">
+        {value}
+      </p>
       <p className="text-xs text-charcoal-light/85">{subline}</p>
     </div>
   );
 }
 
-const STAGE_ORDER: DealStage[] = ["prospect", "active", "matching", "closed"];
+const STAGE_ORDER: MatchStage[] = ["introduced", "active", "closed"];
 
-const STAGE_LABELS: Record<DealStage, string> = {
-  prospect: "Prospect",
+const STAGE_LABELS: Record<MatchStage, string> = {
+  introduced: "Introduced",
   active: "Active",
-  matching: "Matching",
   closed: "Closed",
 };
 
-// Progressively deeper charcoal opacities so the bar reads as a gradient
-// from early-stage (lightest) to closed (darkest).
-const STAGE_BAR_BG: Record<DealStage, string> = {
-  prospect: "bg-charcoal/20",
-  active: "bg-charcoal/40",
-  matching: "bg-charcoal/65",
+const STAGE_BAR_BG: Record<MatchStage, string> = {
+  introduced: "bg-charcoal/25",
+  active: "bg-charcoal/55",
   closed: "bg-charcoal/90",
 };
 
-const STAGE_DOT_BG: Record<DealStage, string> = {
-  prospect: "bg-charcoal/25",
-  active: "bg-charcoal/45",
-  matching: "bg-charcoal/70",
+const STAGE_DOT_BG: Record<MatchStage, string> = {
+  introduced: "bg-charcoal/30",
+  active: "bg-charcoal/60",
   closed: "bg-charcoal/95",
 };
 
 type StageBreakdownProps = {
-  dealsByStage: Record<DealStage, number>;
+  matchesByStage: Record<MatchStage, number>;
 };
 
-function StageBreakdown({ dealsByStage }: StageBreakdownProps) {
-  const total = STAGE_ORDER.reduce((sum, s) => sum + dealsByStage[s], 0);
+function StageBreakdown({ matchesByStage }: StageBreakdownProps) {
+  const total = STAGE_ORDER.reduce((sum, s) => sum + matchesByStage[s], 0);
 
   return (
     <div className="rounded-xl border border-charcoal/[0.08] bg-cream-light/60 p-5 shadow-[0_1px_0_rgba(0,0,0,0.02)]">
       <div className="flex items-center justify-between">
         <p className="text-[11px] font-medium uppercase tracking-wide text-charcoal-light/80">
-          Deals by stage
+          Matches by stage
         </p>
         <p className="text-[11px] text-charcoal-light/70">
           {formatCount(total)} total
@@ -105,13 +94,15 @@ function StageBreakdown({ dealsByStage }: StageBreakdownProps) {
 
       {total === 0 ? (
         <div className="mt-4 rounded-lg border border-dashed border-charcoal/15 bg-cream-light/40 px-4 py-6 text-center">
-          <p className="text-xs text-charcoal-light/80">No deals to show yet.</p>
+          <p className="text-xs text-charcoal-light/80">
+            No matches to show yet.
+          </p>
         </div>
       ) : (
         <>
           <div className="mt-4 flex h-3 w-full overflow-hidden rounded-full bg-charcoal/[0.06]">
             {STAGE_ORDER.map((stage) => {
-              const count = dealsByStage[stage];
+              const count = matchesByStage[stage];
               if (count === 0) return null;
               const widthPct = (count / total) * 100;
               return (
@@ -125,9 +116,9 @@ function StageBreakdown({ dealsByStage }: StageBreakdownProps) {
             })}
           </div>
 
-          <ul className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <ul className="mt-4 grid grid-cols-3 gap-2">
             {STAGE_ORDER.map((stage) => {
-              const count = dealsByStage[stage];
+              const count = matchesByStage[stage];
               const pct = total > 0 ? Math.round((count / total) * 100) : 0;
               return (
                 <li
@@ -161,37 +152,32 @@ function StageBreakdown({ dealsByStage }: StageBreakdownProps) {
 
 const SECTOR_TOP_N = 6;
 
-// Progressively lighter charcoal opacities so the top sector reads darkest
-// and the ranking is visually obvious.
 const SECTOR_BAR_OPACITIES = [0.9, 0.78, 0.65, 0.52, 0.4, 0.28] as const;
 
 type SectorBreakdownProps = {
-  dealsBySector: SectorBreakdownEntry[];
+  matchesBySector: SectorBreakdownEntry[];
   sectorTotalCount: number;
   sectorUnknownCount: number;
 };
 
 function SectorBreakdown({
-  dealsBySector,
+  matchesBySector,
   sectorTotalCount,
   sectorUnknownCount,
 }: SectorBreakdownProps) {
-  const topN = dealsBySector.slice(0, SECTOR_TOP_N);
-  const rest = dealsBySector.slice(SECTOR_TOP_N);
+  const topN = matchesBySector.slice(0, SECTOR_TOP_N);
+  const rest = matchesBySector.slice(SECTOR_TOP_N);
   const restCount = rest.reduce((sum, e) => sum + e.count, 0);
-  const restValue = rest.reduce((sum, e) => sum + e.value, 0);
 
   const rows: Array<{
     key: string;
     label: string;
     count: number;
-    value: number;
     muted?: boolean;
   }> = topN.map((entry) => ({
     key: entry.sector,
     label: entry.sector,
     count: entry.count,
-    value: entry.value,
   }));
 
   if (restCount > 0) {
@@ -199,7 +185,6 @@ function SectorBreakdown({
       key: "__other__",
       label: `Other (${rest.length})`,
       count: restCount,
-      value: restValue,
       muted: true,
     });
   }
@@ -209,7 +194,6 @@ function SectorBreakdown({
       key: "__unknown__",
       label: "Unspecified",
       count: sectorUnknownCount,
-      value: 0,
       muted: true,
     });
   }
@@ -224,7 +208,7 @@ function SectorBreakdown({
             <PieChart className="size-3.5" strokeWidth={1.75} aria-hidden />
           </span>
           <p className="text-[11px] font-medium uppercase tracking-wide text-charcoal-light/80">
-            Open deals by sector
+            Open matches by sector
           </p>
         </div>
         <p className="text-[11px] text-charcoal-light/70">
@@ -235,7 +219,7 @@ function SectorBreakdown({
       {sectorTotalCount === 0 ? (
         <div className="mt-4 rounded-lg border border-dashed border-charcoal/15 bg-cream-light/40 px-4 py-6 text-center">
           <p className="text-xs text-charcoal-light/80">
-            No open deals to break down yet.
+            No open matches to break down yet.
           </p>
         </div>
       ) : (
@@ -266,19 +250,12 @@ function SectorBreakdown({
                     <span className="text-charcoal">
                       {formatCount(row.count)}
                     </span>
-                    <span className="ml-1 text-charcoal-light/70">
-                      {pct}%
-                    </span>
-                    {row.value > 0 ? (
-                      <span className="ml-2 text-charcoal-light/70">
-                        {formatGbp(row.value)}
-                      </span>
-                    ) : null}
+                    <span className="ml-1 text-charcoal-light/70">{pct}%</span>
                   </p>
                 </div>
                 <div
                   className="h-2 w-full overflow-hidden rounded-full bg-charcoal/[0.06]"
-                  aria-label={`${row.label}: ${row.count} deal${row.count === 1 ? "" : "s"} (${pct}%)`}
+                  aria-label={`${row.label}: ${row.count} match${row.count === 1 ? "" : "es"} (${pct}%)`}
                 >
                   <div
                     className="h-full rounded-full bg-charcoal"
@@ -303,16 +280,13 @@ export function DashboardPanel({
   const {
     contactCount,
     contactsNew30d,
-    openDealCount,
-    openPipelineValue,
-    avgDealSize,
-    dealsByStage,
-    dealsBySector,
+    openMatchCount,
+    matchesByStage,
+    matchesBySector,
     sectorTotalCount,
     sectorUnknownCount,
-    matchingCount,
-    matchingValue,
-    suggestionsPendingCount,
+    activeMatchesCount,
+    pendingSuggestionsCount,
   } = metrics;
 
   const contactsSubline =
@@ -320,15 +294,20 @@ export function DashboardPanel({
       ? `+${formatCount(contactsNew30d)} in last 30 days`
       : "No new contacts in last 30 days";
 
-  const pipelineSubline =
-    avgDealSize != null
-      ? `Avg ${formatGbp(avgDealSize)} across ${formatCount(openDealCount)} open deal${openDealCount === 1 ? "" : "s"}`
-      : "No open deal sizes recorded";
+  const openSubline =
+    openMatchCount > 0
+      ? `${formatCount(matchesByStage.introduced)} introduced, ${formatCount(activeMatchesCount)} active`
+      : "No live matches on the canvas";
 
-  const matchingSubline =
-    matchingCount > 0
-      ? `${formatGbp(matchingValue)} in matching stage`
-      : "No deals in matching";
+  const activeSubline =
+    activeMatchesCount > 0
+      ? `${formatCount(activeMatchesCount)} pair${activeMatchesCount === 1 ? "" : "s"} in live conversation`
+      : "No pairs in active conversation";
+
+  const suggestionsSubline =
+    pendingSuggestionsCount > 0
+      ? "Waiting on your intro"
+      : "Inbox is clear — run Generate matches";
 
   return (
     <div className="flex flex-col px-4 py-6 sm:px-8">
@@ -337,7 +316,8 @@ export function DashboardPanel({
           Dashboard
         </h2>
         <p className="mt-1 text-xs text-charcoal-light/80">
-          A quick read on contacts, open deals, and pipeline value.
+          A quick read on contacts, matches on the canvas, and suggestions
+          waiting on you.
         </p>
       </div>
 
@@ -349,37 +329,33 @@ export function DashboardPanel({
           icon={<Users className="size-3.5" strokeWidth={1.75} aria-hidden />}
         />
         <MetricCard
-          label="Potential Deals"
-          value={formatCount(openDealCount)}
-          subline="Open pipeline (excludes passed and closed)"
+          label="Open matches"
+          value={formatCount(openMatchCount)}
+          subline={openSubline}
           icon={
-            <Briefcase className="size-3.5" strokeWidth={1.75} aria-hidden />
+            <Handshake className="size-3.5" strokeWidth={1.75} aria-hidden />
           }
         />
         <MetricCard
-          label="Pipeline Value"
-          value={formatGbp(openPipelineValue)}
-          subline={pipelineSubline}
-          icon={
-            <PoundSterling
-              className="size-3.5"
-              strokeWidth={1.75}
-              aria-hidden
-            />
-          }
-        />
-        <MetricCard
-          label="In Matching"
-          value={formatCount(matchingCount)}
-          subline={matchingSubline}
+          label="Active matches"
+          value={formatCount(activeMatchesCount)}
+          subline={activeSubline}
           icon={<Target className="size-3.5" strokeWidth={1.75} aria-hidden />}
+        />
+        <MetricCard
+          label="Pending suggestions"
+          value={formatCount(pendingSuggestionsCount)}
+          subline={suggestionsSubline}
+          icon={
+            <Sparkles className="size-3.5" strokeWidth={1.75} aria-hidden />
+          }
         />
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <StageBreakdown dealsByStage={dealsByStage} />
+        <StageBreakdown matchesByStage={matchesByStage} />
         <SectorBreakdown
-          dealsBySector={dealsBySector}
+          matchesBySector={matchesBySector}
           sectorTotalCount={sectorTotalCount}
           sectorUnknownCount={sectorUnknownCount}
         />
@@ -407,8 +383,8 @@ export function DashboardPanel({
           </div>
           <p className="text-sm text-cream/85">
             Just met someone? Drop a note, dictate a voice memo, or snap a photo
-            of their card — Rex extracts the contact and suggests deals to
-            run with them.
+            of their card — Rex extracts the contact and proposes intro matches
+            to run with.
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-cream/10 px-3 py-1.5 text-xs font-medium text-cream/90">
@@ -443,9 +419,10 @@ export function DashboardPanel({
             <Sparkles className="size-3.5" strokeWidth={1.75} aria-hidden />
             <span>
               <span className="font-semibold text-charcoal">
-                {formatCount(suggestionsPendingCount)}
+                {formatCount(pendingSuggestionsCount)}
               </span>{" "}
-              unreviewed suggestion{suggestionsPendingCount === 1 ? "" : "s"}
+              unreviewed suggestion
+              {pendingSuggestionsCount === 1 ? "" : "s"}
             </span>
           </button>
         </div>

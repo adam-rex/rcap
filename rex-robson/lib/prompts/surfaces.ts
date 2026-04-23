@@ -1,6 +1,6 @@
 import {
   rexEmptyContacts,
-  rexEmptyDealCanvas,
+  rexEmptyMatchCanvas,
   rexEmptyOrganisations,
   rexEmptySuggestions,
   rexEmptyUpload,
@@ -12,12 +12,12 @@ import {
 export function buildSurfacesSystemAddendum(): string {
   return `
 Opening context the app may show the user (you can reference these counts when relevant):
-- Contacts, open deals, and pending suggestions are live from their workspace.
+- Contacts, open matches on the canvas, and pending suggestions are live from their workspace.
 
 When lists are empty, the product uses this voice (mirror it if you explain empty states):
 - Contacts: "${rexEmptyContacts}"
 - Organisations: "${rexEmptyOrganisations}"
-- Deal canvas: "${rexEmptyDealCanvas}"
+- Match canvas: "${rexEmptyMatchCanvas}"
 - Suggestions: "${rexEmptySuggestions}"
 - Upload & import: "${rexEmptyUpload}"
 

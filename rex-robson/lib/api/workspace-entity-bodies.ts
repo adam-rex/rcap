@@ -1,5 +1,5 @@
 import {
-  parseOptionalNumber,
+  isValidUuid,
   parseOptionalString,
   parseOptionalUuid,
   parseRequiredString,
@@ -83,55 +83,117 @@ export function parseContactUpsertBody(
   };
 }
 
-export type DealUpsertBody = {
-  title: string;
-  size: number | null;
-  dealType: string | null;
-  dealStage: "prospect" | "active" | "matching" | "closed";
-  sector: string | null;
-  structure: string | null;
-  status: string | null;
+export type MatchKind = "founder_investor" | "founder_lender";
+export type MatchStage = "introduced" | "active" | "closed";
+export type MatchOutcome = "won" | "lost" | "passed";
+
+export type MatchUpsertBody = {
+  contactAId: string;
+  contactBId: string;
+  kind: MatchKind;
+  stage: MatchStage;
+  outcome: MatchOutcome | null;
+  context: string | null;
   notes: string | null;
 };
 
-export function parseDealUpsertBody(
+function parseRequiredUuid(
+  body: Record<string, unknown>,
+  key: string,
+): { ok: true; value: string } | { ok: false; error: string } {
+  const v = body[key];
+  if (typeof v !== "string" || v.trim().length === 0) {
+    return { ok: false, error: `${key} is required` };
+  }
+  const t = v.trim();
+  if (!isValidUuid(t)) {
+    return { ok: false, error: `${key} must be a valid UUID` };
+  }
+  return { ok: true, value: t };
+}
+
+function parseKind(raw: string | null): MatchKind | null {
+  return raw === "founder_investor" || raw === "founder_lender" ? raw : null;
+}
+
+function parseStage(raw: string | null): MatchStage | null {
+  return raw === "introduced" || raw === "active" || raw === "closed"
+    ? raw
+    : null;
+}
+
+function parseOutcome(raw: string | null): MatchOutcome | null {
+  return raw === "won" || raw === "lost" || raw === "passed" ? raw : null;
+}
+
+export function parseMatchUpsertBody(
   body: Record<string, unknown>,
 ):
-  | { ok: true; value: DealUpsertBody }
+  | { ok: true; value: MatchUpsertBody }
   | { ok: false; error: string } {
-  const title = parseRequiredString(body, "title", 300);
-  if (!title.ok) return title;
-  const size = parseOptionalNumber(body, "size");
-  if (!size.ok) return size;
-  const dealType = parseOptionalString(body, "dealType", 200);
-  if (!dealType.ok) return dealType;
-  const dealStageRaw = parseOptionalString(body, "dealStage", 40);
-  if (!dealStageRaw.ok) return dealStageRaw;
-  const dealStage =
-    dealStageRaw.value === "active" ||
-    dealStageRaw.value === "matching" ||
-    dealStageRaw.value === "closed"
-      ? dealStageRaw.value
-      : "prospect";
-  const sector = parseOptionalString(body, "sector", 200);
-  if (!sector.ok) return sector;
-  const structure = parseOptionalString(body, "structure", 200);
-  if (!structure.ok) return structure;
-  const status = parseOptionalString(body, "status", 200);
-  if (!status.ok) return status;
+  const contactAId = parseRequiredUuid(body, "contactAId");
+  if (!contactAId.ok) return contactAId;
+  const contactBId = parseRequiredUuid(body, "contactBId");
+  if (!contactBId.ok) return contactBId;
+  if (contactAId.value === contactBId.value) {
+    return {
+      ok: false,
+      error: "contactAId and contactBId must reference different contacts.",
+    };
+  }
+  const kindRaw = parseRequiredString(body, "kind", 40);
+  if (!kindRaw.ok) return kindRaw;
+  const kind = parseKind(kindRaw.value);
+  if (!kind) {
+    return {
+      ok: false,
+      error: "kind must be one of: founder_investor, founder_lender.",
+    };
+  }
+  const stageRaw = parseOptionalString(body, "stage", 40);
+  if (!stageRaw.ok) return stageRaw;
+  const stage = parseStage(stageRaw.value) ?? "introduced";
+  const outcomeRaw = parseOptionalString(body, "outcome", 40);
+  if (!outcomeRaw.ok) return outcomeRaw;
+  const outcome = stage === "closed" ? parseOutcome(outcomeRaw.value) : null;
+  const context = parseOptionalString(body, "context", 8000);
+  if (!context.ok) return context;
   const notes = parseOptionalString(body, "notes", 8000);
   if (!notes.ok) return notes;
+
   return {
     ok: true,
     value: {
-      title: title.value,
-      size: size.value,
-      dealType: dealType.value,
-      dealStage,
-      sector: sector.value,
-      structure: structure.value,
-      status: status.value,
+      contactAId: contactAId.value,
+      contactBId: contactBId.value,
+      kind,
+      stage,
+      outcome,
+      context: context.value,
       notes: notes.value,
     },
   };
+}
+
+export type MatchStageBody = {
+  stage: MatchStage;
+  outcome: MatchOutcome | null;
+};
+
+export function parseMatchStageBody(
+  body: Record<string, unknown>,
+): { ok: true; value: MatchStageBody } | { ok: false; error: string } {
+  const stageRaw = parseRequiredString(body, "stage", 40);
+  if (!stageRaw.ok) return stageRaw;
+  const stage = parseStage(stageRaw.value);
+  if (!stage) {
+    return {
+      ok: false,
+      error: "stage must be one of: introduced, active, closed.",
+    };
+  }
+  const outcomeRaw = parseOptionalString(body, "outcome", 40);
+  if (!outcomeRaw.ok) return outcomeRaw;
+  const outcome = stage === "closed" ? parseOutcome(outcomeRaw.value) : null;
+  return { ok: true, value: { stage, outcome } };
 }

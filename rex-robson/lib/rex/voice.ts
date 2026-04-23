@@ -6,7 +6,10 @@
 export type RexDashboardStats = {
   contactCount: number;
   organisationCount: number;
-  openDealCount: number;
+  /** Open matches = stage in (introduced, active). */
+  openMatchCount: number;
+  /** Active matches = stage = 'active'. */
+  activeMatchCount: number;
   suggestionsPendingCount: number;
   /** All rows; empty-state copy when zero */
   suggestionTotalCount: number;
@@ -33,10 +36,10 @@ export function buildRexOpeningGreeting(
 ): string {
   const t = timeOfDayWord(now);
   const net = networkLine(stats);
-  const { contactCount, openDealCount, suggestionsPendingCount } = stats;
+  const { contactCount, openMatchCount, suggestionsPendingCount } = stats;
   const bits = [
     `${contactCount} contact${contactCount === 1 ? "" : "s"}`,
-    `${openDealCount} open deal${openDealCount === 1 ? "" : "s"}`,
+    `${openMatchCount} open match${openMatchCount === 1 ? "" : "es"}`,
     `${suggestionsPendingCount} suggestion${suggestionsPendingCount === 1 ? "" : "s"} waiting`,
   ];
   return `${t}. ${net} ${bits.join(", ")} — worth your attention today. Ask me anything.`;
@@ -48,10 +51,11 @@ export const rexEmptyContacts =
 export const rexEmptySuggestions =
   "No suggestions right now. Either your network is perfect or you haven't fed me enough. Probably the latter.";
 
-export const rexEmptyDealCanvas = "No deals on the canvas. Let's fix that.";
+export const rexEmptyMatchCanvas =
+  "No matches on the canvas yet. Accept a suggestion or pair two contacts to start one.";
 
 export const rexEmptyOrganisations =
-  "No organisations yet. Map the players before the deals get fuzzy.";
+  "No organisations yet. Map the players before the matches get fuzzy.";
 
 export const rexEmptyUpload =
   "Nothing uploaded. Drop a stack of cards or a messy CSV — I'll make sense of it.";

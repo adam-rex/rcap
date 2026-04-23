@@ -21,7 +21,7 @@ function formatBytes(n: number): string {
 export function ChatComposer({
   onSubmitSearch,
   isBusy = false,
-  placeholder = "Search contacts, deals, orgs…",
+  placeholder = "Search contacts, matches, orgs…",
 }: ChatComposerProps) {
   const [value, setValue] = useState("");
   const [files, setFiles] = useState<File[]>([]);

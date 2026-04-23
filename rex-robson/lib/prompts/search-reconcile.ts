@@ -4,21 +4,23 @@ import { REX_PERSONA_CORE } from "./persona";
 const RECONCILE_TASK = `
 You are reconciling two sources about the same user search:
 
-1) **Deterministic baseline** — ILIKE scans derived from the user’s query (full string plus extracted tokens, and sometimes a small **recent** contacts/deals sample when the query is exploratory and keyword scans were empty). Treat listed rows as real workspace data.
+1) **Deterministic baseline** — ILIKE scans derived from the user’s query (full string plus extracted tokens, and sometimes a small **recent** contacts/matches sample when the query is exploratory and keyword scans were empty). Treat listed rows as real workspace data.
 
 2) **Draft answer** — produced by an assistant that explored the DB via tools (possibly different search terms).
 
 Your job:
 - Produce one final reply in Rex's voice for the user.
-- **Do not** claim the workspace is empty if the baseline lists contacts, deals, organisations, or suggestions — summarize what is there.
+- **Do not** claim the workspace is empty if the baseline lists contacts, matches, organisations, or suggestions — summarize what is there.
 - If the baseline includes an “exploratory context” note with a recent sample, you may use it to discuss intros, sectors, or who might fit together — still do not invent IDs or people not shown.
-- When the user asks open-ended questions (“any deals to match?”, “who should meet?”), tool results that reference real rows from the database are valid even when the literal one-string scan would have been empty; align with any rows present in the baseline or clearly supported by tool JSON.
+- When the user asks open-ended questions (“who should I introduce?”, “any pairs worth running?”), tool results that reference real rows from the database are valid even when the literal one-string scan would have been empty; align with any rows present in the baseline or clearly supported by tool JSON.
 - If the draft mentions specific entities or counts not supported by the baseline or plausible tool exploration, remove or soften those claims (do not invent records).
 - If baseline and draft agree, you may keep the draft wording; tighten if needed.
 
 Formatting:
 - If you list entities, use **bulleted lists** — one entity per line.
-- Contacts: \`- **Name** — contact_type, sector, geography\` (omit missing fields).\n+- Deals: \`- **Title** — stage/status, sector\` (omit missing fields).\n+- Avoid long pipe-separated rows.\n+
+- Contacts: \`- **Name** — contact_type, sector, geography\` (omit missing fields).
+- Matches: \`- **Contact A ↔ Contact B** — stage, kind, outcome (if closed)\` (omit missing fields).
+- Avoid long pipe-separated rows.
 Output only the final user-facing message — no headings, no meta commentary.
 `.trim();
 

@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   fetchContactsByPattern,
-  fetchDealsByPattern,
+  fetchMatchesByPattern,
   fetchOrganisationsByPattern,
   fetchPendingSuggestionsByPattern,
   safeIlikePattern,
@@ -10,7 +10,7 @@ import {
 export type WorkspaceToolName =
   | "search_contacts"
   | "search_organisations"
-  | "search_deals"
+  | "search_matches"
   | "search_suggestions";
 
 export async function runWorkspaceTool(
@@ -41,8 +41,8 @@ export async function runWorkspaceTool(
       case "search_organisations":
         rows = await fetchOrganisationsByPattern(supabase, pattern, limit);
         break;
-      case "search_deals":
-        rows = await fetchDealsByPattern(supabase, pattern, limit);
+      case "search_matches":
+        rows = await fetchMatchesByPattern(supabase, pattern, limit);
         break;
       case "search_suggestions":
         rows = await fetchPendingSuggestionsByPattern(

@@ -84,7 +84,7 @@ function inferDemoBadges(name: string): { itemCount: number; badges: ProcessedIm
       badges: [
         { label: "2 contacts", variant: "sky" },
         { label: "1 organisation profile", variant: "emerald" },
-        { label: "Deal criteria updated", variant: "sky" },
+        { label: "Matching criteria updated", variant: "sky" },
       ],
     };
   }

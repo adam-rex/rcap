@@ -11,6 +11,7 @@ import {
 } from "react";
 import { rexEmptySuggestions } from "@/lib/rex/voice";
 import type { WorkspaceSuggestionRow } from "@/lib/data/workspace-lists";
+import type { MatchKind } from "@/lib/data/workspace-matches-page.types";
 
 const LAST_RUN_STORAGE_KEY = "rex:suggestions:lastRun";
 const THROTTLE_MS = 60_000;
@@ -27,6 +28,11 @@ type SuggestionsPanelProps = {
   isEmpty: boolean;
 };
 
+const KIND_LABEL: Record<MatchKind, string> = {
+  founder_investor: "Founder · Investor",
+  founder_lender: "Founder · Lender",
+};
+
 function muted(line: string | null | undefined) {
   if (line == null || line === "") return null;
   return (
@@ -34,16 +40,6 @@ function muted(line: string | null | undefined) {
       {line}
     </p>
   );
-}
-
-function stripDedupeTag(body: string | null | undefined): string | null {
-  if (!body) return null;
-  const trimmed = body
-    .split("\n")
-    .filter((line, idx) => !(idx === 0 && line.trim().startsWith("rex_match_pair:")))
-    .join("\n")
-    .trim();
-  return trimmed.length > 0 ? trimmed : null;
 }
 
 function formatRelative(ts: number): string {
@@ -55,9 +51,23 @@ function formatRelative(ts: number): string {
   return `${Math.floor(diff / 86_400_000)}d ago`;
 }
 
+// Raw scores from scorePair (lib/data/intro-match-suggestions.ts) start at
+// MIN_SCORE=5 and cap around 14 with all signals present. Bucket into 1–5 so
+// the UI shows a clean confidence rating ("X/5") rather than a raw heuristic.
+function scoreOutOfFive(raw: number): number {
+  if (!Number.isFinite(raw)) return 1;
+  if (raw >= 13) return 5;
+  if (raw >= 11) return 4;
+  if (raw >= 9) return 3;
+  if (raw >= 7) return 2;
+  return 1;
+}
+
 function resultSummary(r: GenerateMatchesResult): string {
   const parts: string[] = [];
-  parts.push(`Added ${r.created} ${r.created === 1 ? "suggestion" : "suggestions"}`);
+  parts.push(
+    `Added ${r.created} ${r.created === 1 ? "suggestion" : "suggestions"}`,
+  );
   const extras: string[] = [];
   if (r.skippedDuplicates > 0) extras.push(`${r.skippedDuplicates} duplicates`);
   if (r.skippedBelowThreshold > 0)
@@ -70,8 +80,11 @@ export function SuggestionsPanel({ rows, isEmpty }: SuggestionsPanelProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [lastRunAt, setLastRunAt] = useState<number | null>(null);
-  const [lastResult, setLastResult] = useState<GenerateMatchesResult | null>(null);
+  const [lastResult, setLastResult] = useState<GenerateMatchesResult | null>(
+    null,
+  );
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
   const [, setTick] = useState(0);
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
   const [pendingActionIds, setPendingActionIds] = useState<Set<string>>(
@@ -94,6 +107,12 @@ export function SuggestionsPanel({ rows, isEmpty }: SuggestionsPanelProps) {
     const id = window.setInterval(() => setTick((n) => n + 1), 15_000);
     return () => window.clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    if (!toast) return;
+    const id = window.setTimeout(() => setToast(null), 3200);
+    return () => window.clearTimeout(id);
+  }, [toast]);
 
   const throttleRemaining = useMemo(() => {
     if (lastRunAt == null) return 0;
@@ -129,8 +148,8 @@ export function SuggestionsPanel({ rows, isEmpty }: SuggestionsPanelProps) {
     });
   }, [isPending, router, throttleRemaining]);
 
-  const updateStatus = useCallback(
-    async (id: string, status: "acted" | "dismissed") => {
+  const runAction = useCallback(
+    async (id: string, action: "accept" | "dismiss") => {
       if (pendingActionIds.has(id)) return;
       setError(null);
       setPendingActionIds((prev) => {
@@ -145,16 +164,19 @@ export function SuggestionsPanel({ rows, isEmpty }: SuggestionsPanelProps) {
       });
       try {
         const res = await fetch(
-          `/api/workspace/suggestions/${encodeURIComponent(id)}/status`,
-          {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ status }),
-          },
+          `/api/workspace/suggestions/${encodeURIComponent(id)}/${action}`,
+          { method: "POST" },
         );
         if (!res.ok) {
-          const text = await res.text().catch(() => "");
-          throw new Error(text || `update_failed (${res.status})`);
+          const data = (await res.json().catch(() => ({}))) as {
+            error?: string;
+          };
+          throw new Error(data.error ?? `${action}_failed_${res.status}`);
+        }
+        if (action === "accept") {
+          setToast("Match created — see Pipeline › Matches.");
+        } else {
+          setToast("Suggestion dismissed.");
         }
         router.refresh();
       } catch (e) {
@@ -213,9 +235,7 @@ export function SuggestionsPanel({ rows, isEmpty }: SuggestionsPanelProps) {
             className="inline-flex items-center gap-2 rounded-lg border border-charcoal/[0.08] bg-cream-light/80 px-3 py-1.5 text-xs font-medium text-charcoal shadow-[0_1px_0_rgba(0,0,0,0.02)] transition-colors hover:bg-cream-light disabled:cursor-not-allowed disabled:opacity-60"
           >
             <RefreshCw
-              className={
-                "size-3.5 " + (isPending ? "animate-spin" : "")
-              }
+              className={"size-3.5 " + (isPending ? "animate-spin" : "")}
               strokeWidth={1.75}
               aria-hidden
             />
@@ -234,6 +254,14 @@ export function SuggestionsPanel({ rows, isEmpty }: SuggestionsPanelProps) {
           {resultSummary(lastResult)}
         </div>
       ) : null}
+      {toast ? (
+        <div
+          className="mb-3 rounded-lg border border-charcoal/[0.12] bg-charcoal/[0.04] px-3 py-2 text-xs text-charcoal"
+          role="status"
+        >
+          {toast}
+        </div>
+      ) : null}
       {error ? (
         <div className="mb-3 rounded-lg border border-red-500/20 bg-red-500/[0.06] px-3 py-2 text-xs text-red-700">
           {error}
@@ -249,7 +277,11 @@ export function SuggestionsPanel({ rows, isEmpty }: SuggestionsPanelProps) {
             {rexEmptySuggestions}
           </p>
           <p className="mt-3 max-w-md text-sm text-charcoal-light">
-            Hit <span className="font-medium text-charcoal">Generate matches</span> to scan your contacts for founder <span aria-hidden>&lt;&gt;</span> investor and founder <span aria-hidden>&lt;&gt;</span> lender pairs with overlapping sector, deal type, cheque size, or geography.
+            Hit{" "}
+            <span className="font-medium text-charcoal">Generate matches</span>{" "}
+            to scan your contacts for founder <span aria-hidden>&lt;&gt;</span>{" "}
+            investor and founder <span aria-hidden>&lt;&gt;</span> lender pairs
+            with overlapping sector, deal type, cheque size, or geography.
           </p>
         </div>
       ) : (
@@ -257,6 +289,12 @@ export function SuggestionsPanel({ rows, isEmpty }: SuggestionsPanelProps) {
           <ul className="divide-y divide-charcoal/[0.06]">
             {visibleRows.map((s) => {
               const acting = pendingActionIds.has(s.id);
+              const hasPair =
+                Boolean(s.contact_a_name) && Boolean(s.contact_b_name);
+              const headline = hasPair
+                ? `${s.contact_a_name} → ${s.contact_b_name}`
+                : (s.title?.trim() || "Suggestion");
+              const subtitle = hasPair && s.title?.trim() ? s.title.trim() : null;
               return (
                 <li
                   key={s.id}
@@ -267,27 +305,44 @@ export function SuggestionsPanel({ rows, isEmpty }: SuggestionsPanelProps) {
                 >
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-charcoal">
-                      {s.title?.trim() || "Suggestion"}
+                      {headline}
                     </p>
-                    {muted(stripDedupeTag(s.body))}
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                      {s.kind ? (
+                        <span className="inline-flex items-center rounded-full border border-charcoal/15 bg-charcoal/5 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-charcoal">
+                          {KIND_LABEL[s.kind]}
+                        </span>
+                      ) : null}
+                      {typeof s.score === "number" ? (
+                        <span className="inline-flex items-center rounded-full border border-charcoal/10 bg-cream px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-charcoal-light">
+                          score {scoreOutOfFive(s.score)}/5
+                        </span>
+                      ) : null}
+                    </div>
+                    {subtitle ? (
+                      <p className="mt-1 text-xs text-charcoal-light/80">
+                        {subtitle}
+                      </p>
+                    ) : null}
+                    {muted(s.body)}
                   </div>
                   <div className="flex shrink-0 items-center gap-1.5">
                     <button
                       type="button"
-                      onClick={() => updateStatus(s.id, "acted")}
+                      onClick={() => runAction(s.id, "accept")}
                       disabled={acting}
-                      aria-label="Accept suggestion"
-                      title="Accept"
+                      aria-label="Accept suggestion and create match"
+                      title="Accept & move to canvas"
                       className="inline-flex size-8 items-center justify-center rounded-lg border border-charcoal/[0.08] bg-cream-light/60 text-charcoal transition-colors hover:bg-charcoal hover:text-cream disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <Check className="size-4" strokeWidth={2} aria-hidden />
                     </button>
                     <button
                       type="button"
-                      onClick={() => updateStatus(s.id, "dismissed")}
+                      onClick={() => runAction(s.id, "dismiss")}
                       disabled={acting}
-                      aria-label="Reject suggestion"
-                      title="Reject"
+                      aria-label="Dismiss suggestion"
+                      title="Dismiss"
                       className="inline-flex size-8 items-center justify-center rounded-lg border border-charcoal/[0.08] bg-cream-light/60 text-charcoal-light transition-colors hover:bg-red-500 hover:text-white hover:border-red-500/40 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <X className="size-4" strokeWidth={2} aria-hidden />

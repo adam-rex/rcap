@@ -9,7 +9,7 @@ The user initiated a workspace search. Fixed database lookups produced the block
 
 Summarize what matched in Rex's voice; if nothing matched, say so and suggest sharper keywords. Do not invent records not listed there.
 
-If the result set is large or fuzzy, offer one concrete way to narrow the next search (e.g. sector, geography, deal status).
+If the result set is large or fuzzy, offer one concrete way to narrow the next search (e.g. sector, geography, match stage).
 `.trim();
 
 export type BuildSearchSystemOptions = {

@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { DealsBrowsePanel } from "./deals-browse-panel";
+import { MatchCanvasPanel } from "./match-canvas-panel";
 import { RexTasksPanel } from "./rex-tasks-panel";
 
-type PipelineSubView = "deals" | "tasks";
+type PipelineSubView = "matches" | "tasks";
 
 const SUB_VIEWS: { id: PipelineSubView; label: string }[] = [
-  { id: "deals", label: "Deals" },
+  { id: "matches", label: "Matches" },
   { id: "tasks", label: "Tasks" },
 ];
 
@@ -21,7 +21,7 @@ function subTabClass(active: boolean) {
 }
 
 export function PipelinePanel() {
-  const [subView, setSubView] = useState<PipelineSubView>("deals");
+  const [subView, setSubView] = useState<PipelineSubView>("matches");
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -46,7 +46,7 @@ export function PipelinePanel() {
         </div>
       </div>
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-        {subView === "deals" ? <DealsBrowsePanel /> : <RexTasksPanel />}
+        {subView === "matches" ? <MatchCanvasPanel /> : <RexTasksPanel />}
       </div>
     </div>
   );

@@ -1,10 +1,10 @@
 #!/usr/bin/env npx tsx
 /**
- * Parameterised Supabase seed (organisations → contacts; deals standalone).
+ * Parameterised Supabase seed (organisations → contacts → matches + suggestions; emails standalone).
  *
  * Usage:
  *   npm run db:seed
- *   npm run db:seed -- --orgs 5 --contacts 25 --deals 12
+ *   npm run db:seed -- --orgs 5 --contacts 25 --matches 12 --suggestions 10
  *   npm run db:seed -- --append --contacts 5
  *   npm run db:seed -- --emails 0
  *   npm run db:seed -- --call-logs 10
@@ -16,11 +16,13 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { faker } from "@faker-js/faker";
 import {
   createContacts,
-  createDeals,
+  createMatches,
   createOrganisations,
+  createStructuredSuggestions,
   type ContactRow,
-  type DealRow,
+  type MatchRow,
   type OrganisationRow,
+  type StructuredSuggestionRow,
 } from "./factories";
 import { seedInboundEmails } from "./emailSeed";
 import { seedCallLogs } from "./callLogSeed";
@@ -30,20 +32,25 @@ import { createServiceSupabase } from "./env";
 const DUMMY = "00000000-0000-0000-0000-000000000000";
 
 async function clearTables(supabase: SupabaseClient): Promise<void> {
-  const { error: eh } = await supabase
-    .from("deal_stage_history")
+  const { error: emh } = await supabase
+    .from("match_stage_history")
     .delete()
     .neq("id", -1);
-  if (eh) throw eh;
+  if (emh) throw emh;
   const { error: e0 } = await supabase.from("rex_tasks").delete().neq("id", DUMMY);
   if (e0) throw e0;
+  const { error: em } = await supabase.from("matches").delete().neq("id", DUMMY);
+  if (em) throw em;
+  const { error: es } = await supabase
+    .from("suggestions")
+    .delete()
+    .neq("id", DUMMY);
+  if (es) throw es;
   const { error: e1 } = await supabase
     .from("contacts")
     .delete()
     .neq("id", DUMMY);
   if (e1) throw e1;
-  const { error: e2 } = await supabase.from("deals").delete().neq("id", DUMMY);
-  if (e2) throw e2;
   const { error: e3 } = await supabase
     .from("organisations")
     .delete()
@@ -55,7 +62,7 @@ const CHUNK = 100;
 
 async function insertChunked<T extends Record<string, unknown>>(
   supabase: SupabaseClient,
-  table: "organisations" | "contacts" | "deals",
+  table: "organisations" | "contacts" | "matches" | "suggestions",
   rows: T[],
 ): Promise<void> {
   for (let i = 0; i < rows.length; i += CHUNK) {
@@ -74,21 +81,22 @@ function parsePositiveInt(raw: string | undefined, flag: string): number {
 }
 
 function printHelp(): void {
-  console.log(`db:seed — fill organisations, contacts, deals, and inbound emails with Faker data.
+  console.log(`db:seed — fill organisations, contacts, matches, suggestions, and inbound emails with Faker data.
 
 Options:
-  --orgs, -o       Number of organisations (default: 3)
-  --contacts, -c   Number of contacts (default: 10)
-  --deals, -d      Number of deals (default: 5)
-  --emails, -e     Number of rex_inbound_emails rows (default: 5; 0 skips email seeding)
-  --call-logs, -l  Number of call-log rows in rex_inbound_emails (default: 4; 0 skips call-log seeding)
-  --tasks, -t      Number of rex_tasks rows (default: 8; 0 skips task seeding)
-  --append, -a     Skip clearing tables before insert
-  --seed           Faker seed for reproducible runs (number)
-  --help, -h       Show this message
+  --orgs, -o          Number of organisations (default: 3)
+  --contacts, -c      Number of contacts (default: 10)
+  --matches, -m       Number of matches across stages (default: 8)
+  --suggestions, -s   Number of pending suggestions (default: 6)
+  --emails, -e        Number of rex_inbound_emails rows (default: 5; 0 skips email seeding)
+  --call-logs, -l     Number of call-log rows in rex_inbound_emails (default: 4; 0 skips call-log seeding)
+  --tasks, -t         Number of rex_tasks rows (default: 8; 0 skips task seeding)
+  --append, -a        Skip clearing tables before insert
+  --seed              Faker seed for reproducible runs (number)
+  --help, -h          Show this message
 
 Examples:
-  npm run db:seed -- --orgs 8 --contacts 40 --deals 15
+  npm run db:seed -- --orgs 8 --contacts 40 --matches 15 --suggestions 12
   npm run db:seed -- --emails 0
   npm run db:seed -- --seed 12345
 `);
@@ -97,7 +105,8 @@ Examples:
 export type SeedOptions = {
   orgCount: number;
   contactCount: number;
-  dealCount: number;
+  matchCount: number;
+  suggestionCount: number;
   emailCount: number;
   callLogCount: number;
   taskCount: number;
@@ -111,7 +120,8 @@ export async function seedDatabase(
 ): Promise<{
   organisations: OrganisationRow[];
   contacts: ContactRow[];
-  deals: DealRow[];
+  matches: MatchRow[];
+  suggestions: StructuredSuggestionRow[];
   emailRows: number;
   callLogRows: number;
   taskRows: number;
@@ -121,14 +131,14 @@ export async function seedDatabase(
   const {
     orgCount,
     contactCount,
-    dealCount,
+    matchCount,
+    suggestionCount,
     emailCount,
     callLogCount,
     taskCount,
     append,
     fakerSeed,
-  } =
-    options;
+  } = options;
 
   if (contactCount > 0 && orgCount === 0) {
     throw new Error("--contacts requires at least one organisation (--orgs >= 1).");
@@ -145,7 +155,12 @@ export async function seedDatabase(
   const organisations = createOrganisations(orgCount);
   const contacts =
     orgCount > 0 ? createContacts(organisations, contactCount) : [];
-  const deals = createDeals(dealCount);
+  const matches = createMatches(contacts, matchCount);
+  const suggestions = createStructuredSuggestions(
+    contacts,
+    matches,
+    suggestionCount,
+  );
 
   if (organisations.length > 0) {
     await insertChunked(supabase, "organisations", organisations);
@@ -153,8 +168,11 @@ export async function seedDatabase(
   if (contacts.length > 0) {
     await insertChunked(supabase, "contacts", contacts);
   }
-  if (deals.length > 0) {
-    await insertChunked(supabase, "deals", deals);
+  if (matches.length > 0) {
+    await insertChunked(supabase, "matches", matches);
+  }
+  if (suggestions.length > 0) {
+    await insertChunked(supabase, "suggestions", suggestions);
   }
 
   const { emails, extractions, attachments } = await seedInboundEmails(supabase, {
@@ -177,7 +195,8 @@ export async function seedDatabase(
   return {
     organisations,
     contacts,
-    deals,
+    matches,
+    suggestions,
     emailRows: emails.length,
     callLogRows: callLogEmails.length,
     taskRows: tasks.length,
@@ -192,7 +211,8 @@ async function main(): Promise<void> {
     options: {
       orgs: { type: "string", short: "o", default: "3" },
       contacts: { type: "string", short: "c", default: "10" },
-      deals: { type: "string", short: "d", default: "5" },
+      matches: { type: "string", short: "m", default: "8" },
+      suggestions: { type: "string", short: "s", default: "6" },
       emails: { type: "string", short: "e", default: "5" },
       "call-logs": { type: "string", short: "l", default: "4" },
       tasks: { type: "string", short: "t", default: "8" },
@@ -211,7 +231,8 @@ async function main(): Promise<void> {
 
   const orgCount = parsePositiveInt(values.orgs, "--orgs");
   const contactCount = parsePositiveInt(values.contacts, "--contacts");
-  const dealCount = parsePositiveInt(values.deals, "--deals");
+  const matchCount = parsePositiveInt(values.matches, "--matches");
+  const suggestionCount = parsePositiveInt(values.suggestions, "--suggestions");
   const emailCount = parsePositiveInt(values.emails, "--emails");
   const callLogCount = parsePositiveInt(values["call-logs"], "--call-logs");
   const taskCount = parsePositiveInt(values.tasks, "--tasks");
@@ -223,7 +244,8 @@ async function main(): Promise<void> {
   const {
     organisations,
     contacts,
-    deals,
+    matches,
+    suggestions,
     emailRows,
     callLogRows,
     taskRows,
@@ -232,7 +254,8 @@ async function main(): Promise<void> {
   } = await seedDatabase(supabase, {
     orgCount,
     contactCount,
-    dealCount,
+    matchCount,
+    suggestionCount,
     emailCount,
     callLogCount,
     taskCount,
@@ -241,9 +264,7 @@ async function main(): Promise<void> {
   });
 
   const emailLine =
-    emailCount > 0
-      ? ` ${emailRows} inbound emails.`
-      : "";
+    emailCount > 0 ? ` ${emailRows} inbound emails.` : "";
   const callLogLine = callLogCount > 0 ? ` ${callLogRows} call logs.` : "";
   const taskLine = taskCount > 0 ? ` ${taskRows} Rex tasks.` : "";
   const extractionLine =
@@ -252,7 +273,7 @@ async function main(): Promise<void> {
       : "";
 
   console.log(
-    `Seeded ${organisations.length} organisations, ${contacts.length} contacts, ${deals.length} deals.${emailLine}${callLogLine}${taskLine}${extractionLine}` +
+    `Seeded ${organisations.length} organisations, ${contacts.length} contacts, ${matches.length} matches, ${suggestions.length} suggestions.${emailLine}${callLogLine}${taskLine}${extractionLine}` +
       (values.append ? " (append mode)" : ""),
   );
 }

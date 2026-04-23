@@ -44,7 +44,6 @@ export async function GET(_req: Request, context: RouteContext) {
         payload: x.payload,
         createdContactId: x.createdContactId,
         createdOrganisationId: x.createdOrganisationId,
-        createdDealId: x.createdDealId,
         createdSuggestionId: x.createdSuggestionId,
       })),
     });

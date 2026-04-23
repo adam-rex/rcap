@@ -66,9 +66,9 @@ export const WORKSPACE_SEARCH_TOOLS = [
     },
   },
   {
-    name: "search_deals",
+    name: "search_matches",
     description:
-      "Search deals by substring on title, notes, sector, and structure.",
+      "Search intro matches between two contacts by substring on context and notes. Returns rows with both contact names, kind (founder·investor / founder·lender), stage, and outcome.",
     input_schema: {
       type: "object",
       properties: {
@@ -97,7 +97,7 @@ function isWorkspaceToolName(name: string): name is WorkspaceToolName {
   return (
     name === "search_contacts" ||
     name === "search_organisations" ||
-    name === "search_deals" ||
+    name === "search_matches" ||
     name === "search_suggestions"
   );
 }

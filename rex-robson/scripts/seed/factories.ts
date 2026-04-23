@@ -51,36 +51,15 @@ const ROLES = [
   "Analyst",
 ] as const;
 
-const DEAL_STRUCTURES = [
-  "Series A preferred",
-  "Series B preferred",
-  "majority_recap",
-  "minority_growth",
-  "buyout",
-  "secondary",
-  "credit_facility",
-  "structured_equity",
+const CONTACT_TYPES = [
+  "Founder",
+  "Investor",
+  "Lender",
 ] as const;
 
-const DEAL_STATUSES = [
-  "sourcing",
-  "diligence",
-  "ioi",
-  "live",
-  "passed",
-  "closed",
-] as const;
-
-const DEAL_TYPES = [
-  "equity deal",
-  "debt deal",
-  "invoice finance",
-  "senior debt",
-  "mezzanine debt",
-  "bridging",
-] as const;
-
-const DEAL_STAGES = ["prospect", "active", "matching", "closed"] as const;
+const MATCH_OUTCOMES = ["won", "lost", "passed"] as const;
+const MATCH_KINDS = ["founder_investor", "founder_lender"] as const;
+type MatchStage = "introduced" | "active" | "closed";
 
 function pickMany<T extends readonly string[]>(
   pool: T,
@@ -103,12 +82,15 @@ export type OrganisationRow = {
 };
 
 export type ContactRow = {
+  id: string;
   name: string;
   organisation_id: string;
+  contact_type: (typeof CONTACT_TYPES)[number];
   role: string;
   deal_types: string[];
   min_deal_size: number | null;
   max_deal_size: number | null;
+  sector: string;
   sectors: string[];
   geography: string;
   relationship_score: number;
@@ -117,15 +99,26 @@ export type ContactRow = {
   source: string;
 };
 
-export type DealRow = {
+export type MatchRow = {
+  id: string;
+  contact_a_id: string;
+  contact_b_id: string;
+  kind: (typeof MATCH_KINDS)[number];
+  stage: MatchStage;
+  outcome: (typeof MATCH_OUTCOMES)[number] | null;
+  context: string;
+  notes: string | null;
+};
+
+export type StructuredSuggestionRow = {
+  id: string;
   title: string;
-  size: number;
-  deal_type: string;
-  deal_stage: (typeof DEAL_STAGES)[number];
-  sector: string;
-  structure: string;
-  status: string;
-  notes: string;
+  body: string;
+  status: "pending";
+  contact_a_id: string;
+  contact_b_id: string;
+  kind: (typeof MATCH_KINDS)[number];
+  score: number;
 };
 
 export type RexTaskRow = {
@@ -169,16 +162,22 @@ export function createContacts(
       min_deal_size = minM * 1_000_000;
       max_deal_size = (minM + span) * 1_000_000;
     }
+    const primarySector = pickOne(SECTORS);
     rows.push({
+      id: randomUUID(),
       name: faker.person.fullName(),
       organisation_id: org.id,
+      contact_type: pickOne(CONTACT_TYPES),
       role: pickOne(ROLES),
       deal_types: pickMany(CONTACT_DEAL_TYPES, 1, 3),
       min_deal_size,
       max_deal_size,
-      sectors: pickMany(SECTORS, 1, 3),
+      sector: primarySector,
+      sectors: Array.from(new Set([primarySector, ...pickMany(SECTORS, 0, 2)])),
       geography: faker.location.country(),
-      relationship_score: Number(faker.number.float({ min: 0.35, max: 0.99, fractionDigits: 2 })),
+      relationship_score: Number(
+        faker.number.float({ min: 0.35, max: 0.99, fractionDigits: 2 }),
+      ),
       last_contact_date: faker.date
         .recent({ days: 365 })
         .toISOString()
@@ -190,26 +189,137 @@ export function createContacts(
   return rows;
 }
 
-export function createDeals(num: number): DealRow[] {
-  const rows: DealRow[] = [];
-  for (let i = 0; i < num; i++) {
-    const company = faker.company.name();
-    const theme = faker.helpers.arrayElement([
-      "platform recapitalization",
-      "growth financing",
-      "buyout",
-      "co-invest opportunity",
-      "carve-out",
-    ]);
+function splitByType(contacts: ContactRow[]): {
+  founders: ContactRow[];
+  investors: ContactRow[];
+  lenders: ContactRow[];
+} {
+  return {
+    founders: contacts.filter((c) => c.contact_type === "Founder"),
+    investors: contacts.filter((c) => c.contact_type === "Investor"),
+    lenders: contacts.filter((c) => c.contact_type === "Lender"),
+  };
+}
+
+/**
+ * Produce matches across the three stages, with realistic outcomes on closed rows.
+ * Uses deterministic pair keys so we never emit the same (kind, pair) twice inside one batch.
+ */
+export function createMatches(
+  contacts: ContactRow[],
+  num: number,
+): MatchRow[] {
+  if (contacts.length < 2) return [];
+  const { founders, investors, lenders } = splitByType(contacts);
+  const rows: MatchRow[] = [];
+  const seenKeys = new Set<string>();
+
+  const makePair = (
+    kind: (typeof MATCH_KINDS)[number],
+  ): [ContactRow, ContactRow] | null => {
+    if (founders.length === 0) return null;
+    const counterparts = kind === "founder_investor" ? investors : lenders;
+    if (counterparts.length === 0) return null;
+    for (let attempt = 0; attempt < 25; attempt += 1) {
+      const a = faker.helpers.arrayElement(founders);
+      const b = faker.helpers.arrayElement(counterparts);
+      if (a.id === b.id) continue;
+      const key = `${kind}:${[a.id, b.id].sort().join(":")}`;
+      if (seenKeys.has(key)) continue;
+      seenKeys.add(key);
+      return [a, b];
+    }
+    return null;
+  };
+
+  const stagePlan: MatchStage[] = [];
+  const introCount = Math.ceil(num * 0.4);
+  const activeCount = Math.ceil(num * 0.35);
+  const closedCount = Math.max(0, num - introCount - activeCount);
+  for (let i = 0; i < introCount; i += 1) stagePlan.push("introduced");
+  for (let i = 0; i < activeCount; i += 1) stagePlan.push("active");
+  for (let i = 0; i < closedCount; i += 1) stagePlan.push("closed");
+
+  for (const stage of stagePlan) {
+    const kind = pickOne(MATCH_KINDS);
+    const pair = makePair(kind);
+    if (!pair) continue;
+    const [a, b] = pair;
+    const outcome: MatchRow["outcome"] =
+      stage === "closed" ? pickOne(MATCH_OUTCOMES) : null;
+    const context = `${a.name} (${a.sector}) × ${b.name} (${b.sector}). ${faker.lorem.sentence({ min: 8, max: 16 })}`;
+    const notes = faker.datatype.boolean({ probability: 0.5 })
+      ? faker.lorem.sentence({ min: 6, max: 14 })
+      : null;
     rows.push({
-      title: `${company} — ${theme}`,
-      size: faker.number.int({ min: 5, max: 250 }) * 1_000_000,
-      deal_type: pickOne(DEAL_TYPES),
-      deal_stage: pickOne(DEAL_STAGES),
-      sector: pickOne(SECTORS),
-      structure: pickOne(DEAL_STRUCTURES),
-      status: pickOne(DEAL_STATUSES),
-      notes: faker.lorem.sentences({ min: 1, max: 3 }),
+      id: randomUUID(),
+      contact_a_id: a.id,
+      contact_b_id: b.id,
+      kind,
+      stage,
+      outcome,
+      context,
+      notes,
+    });
+  }
+  return rows;
+}
+
+/**
+ * Pending structured suggestions. Skips any pair that already has a match to avoid the
+ * partial-unique index collision between open matches and pending suggestions.
+ */
+export function createStructuredSuggestions(
+  contacts: ContactRow[],
+  existingMatches: MatchRow[],
+  num: number,
+): StructuredSuggestionRow[] {
+  if (contacts.length < 2) return [];
+  const { founders, investors, lenders } = splitByType(contacts);
+  const taken = new Set<string>();
+  for (const m of existingMatches) {
+    taken.add(
+      `${m.kind}:${[m.contact_a_id, m.contact_b_id].sort().join(":")}`,
+    );
+  }
+
+  const rows: StructuredSuggestionRow[] = [];
+  for (let i = 0; i < num; i += 1) {
+    const kind = pickOne(MATCH_KINDS);
+    const counterparts = kind === "founder_investor" ? investors : lenders;
+    if (founders.length === 0 || counterparts.length === 0) continue;
+    let pair: [ContactRow, ContactRow] | null = null;
+    for (let attempt = 0; attempt < 25; attempt += 1) {
+      const a = faker.helpers.arrayElement(founders);
+      const b = faker.helpers.arrayElement(counterparts);
+      if (a.id === b.id) continue;
+      const key = `${kind}:${[a.id, b.id].sort().join(":")}`;
+      if (taken.has(key)) continue;
+      taken.add(key);
+      pair = [a, b];
+      break;
+    }
+    if (!pair) continue;
+    const [a, b] = pair;
+    const title = `${a.name} <> ${b.name}`;
+    const score = Number(
+      faker.number.float({ min: 0.55, max: 0.95, fractionDigits: 2 }),
+    );
+    const body = [
+      `**${a.name}** (founder) <> **${b.name}** (${kind === "founder_investor" ? "investor" : "lender"})`,
+      `- Sector overlap: ${a.sector}`,
+      `- Geography: ${a.geography} / ${b.geography}`,
+      `- Match score: ${score.toFixed(2)}`,
+    ].join("\n");
+    rows.push({
+      id: randomUUID(),
+      title,
+      body,
+      status: "pending",
+      contact_a_id: a.id,
+      contact_b_id: b.id,
+      kind,
+      score,
     });
   }
   return rows;
@@ -219,9 +329,9 @@ export function createRexTasks(num: number): RexTaskRow[] {
   const rows: RexTaskRow[] = [];
   const verb = ["Draft", "Prepare", "Review", "Compile", "Send"];
   const nouns = [
-    "deal memo",
+    "match brief",
     "follow-up list",
-    "intro brief",
+    "intro note",
     "lender fit summary",
     "meeting recap",
   ];
@@ -258,7 +368,6 @@ export function createRexTasks(num: number): RexTaskRow[] {
 const EXTRACTION_KINDS = [
   "contact",
   "organisation",
-  "deal_signal",
   "intro_request",
 ] as const;
 
@@ -319,20 +428,6 @@ function extractionForKind(
           name: org,
           type: pickOne(ORG_TYPES),
           geography: faker.location.country(),
-          notes: faker.lorem.sentence(),
-        },
-      };
-    case "deal_signal":
-      return {
-        title: `${faker.company.buzzNoun()} — ${pickOne(DEAL_STRUCTURES)}`,
-        summary: `${faker.finance.amount({ min: 5, max: 120, dec: 0 })}M · ${pickOne(SECTORS)} · ${pickOne(DEAL_STATUSES)}`,
-        payload: {
-          title: `${faker.company.name()} — growth round`,
-          size: faker.number.int({ min: 5, max: 150 }) * 1_000_000,
-          dealType: pickOne(DEAL_TYPES),
-          structure: pickOne(DEAL_STRUCTURES),
-          sector: pickOne(SECTORS),
-          status: pickOne(DEAL_STATUSES),
           notes: faker.lorem.sentence(),
         },
       };

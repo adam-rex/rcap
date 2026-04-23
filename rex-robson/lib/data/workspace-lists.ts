@@ -1,5 +1,6 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { tryCreateServiceRoleClient } from "@/lib/supabase/service-role";
+import type { MatchKind, MatchStage } from "./workspace-matches-page.types";
 
 const LIST_LIMIT = 80;
 
@@ -10,14 +11,15 @@ export type WorkspaceOrganisationRow = {
   description: string | null;
 };
 
-export type WorkspaceDealRow = {
+export type WorkspaceMatchRow = {
   id: string;
-  title: string;
-  size: number | null;
-  deal_type: string | null;
-  sector: string | null;
-  structure: string | null;
-  status: string | null;
+  contact_a_id: string;
+  contact_b_id: string;
+  contact_a_name: string;
+  contact_b_name: string;
+  kind: MatchKind;
+  stage: MatchStage;
+  context: string | null;
 };
 
 export type WorkspaceSuggestionRow = {
@@ -25,19 +27,33 @@ export type WorkspaceSuggestionRow = {
   title: string | null;
   body: string | null;
   status: string;
+  contact_a_id: string | null;
+  contact_b_id: string | null;
+  contact_a_name: string | null;
+  contact_b_name: string | null;
+  kind: MatchKind | null;
+  score: number | null;
 };
 
 export type WorkspaceLists = {
   organisations: WorkspaceOrganisationRow[];
-  deals: WorkspaceDealRow[];
+  matches: WorkspaceMatchRow[];
   suggestions: WorkspaceSuggestionRow[];
 };
 
 const empty: WorkspaceLists = {
   organisations: [],
-  deals: [],
+  matches: [],
   suggestions: [],
 };
+
+function parseStage(raw: unknown): MatchStage {
+  return raw === "active" || raw === "closed" ? raw : "introduced";
+}
+
+function parseKind(raw: unknown): MatchKind | null {
+  return raw === "founder_investor" || raw === "founder_lender" ? raw : null;
+}
 
 /**
  * Loads recent rows for sidebar surfaces. Uses service role when set (same as dashboard counts)
@@ -55,34 +71,103 @@ export async function getWorkspaceLists(): Promise<WorkspaceLists> {
   }
 
   try {
-    const [orgsRes, dealsRes, suggestionsRes] = await Promise.all([
+    const matchesSelect =
+      "id,contact_a_id,contact_b_id,kind,stage,context," +
+      "contact_a:contacts!matches_contact_a_id_fkey(name)," +
+      "contact_b:contacts!matches_contact_b_id_fkey(name)";
+    const suggestionsSelect =
+      "id,title,body,status,contact_a_id,contact_b_id,kind,score," +
+      "contact_a:contacts!suggestions_contact_a_id_fkey(name)," +
+      "contact_b:contacts!suggestions_contact_b_id_fkey(name)";
+
+    const [orgsRes, matchesRes, suggestionsRes] = await Promise.all([
       client
         .from("organisations")
         .select("id,name,type,description")
         .order("created_at", { ascending: false })
         .limit(LIST_LIMIT),
       client
-        .from("deals")
-        .select("id,title,size,deal_type,sector,structure,status")
-        .or("status.is.null,status.not.in.(passed,closed)")
-        .order("created_at", { ascending: false })
+        .from("matches")
+        .select(matchesSelect)
+        .neq("stage", "closed")
+        .order("updated_at", { ascending: false })
         .limit(LIST_LIMIT),
       client
         .from("suggestions")
-        .select("id,title,body,status")
+        .select(suggestionsSelect)
         .eq("status", "pending")
         .order("created_at", { ascending: false })
         .limit(LIST_LIMIT),
     ]);
 
     if (orgsRes.error) throw orgsRes.error;
-    if (dealsRes.error) throw dealsRes.error;
+    if (matchesRes.error) throw matchesRes.error;
     if (suggestionsRes.error) throw suggestionsRes.error;
+
+    const matches: WorkspaceMatchRow[] = (matchesRes.data ?? []).map((raw) => {
+      const r = raw as unknown as {
+        id: string;
+        contact_a_id: string;
+        contact_b_id: string;
+        kind: string | null;
+        stage: string | null;
+        context: string | null;
+        contact_a: { name: string | null } | null;
+        contact_b: { name: string | null } | null;
+      };
+      return {
+        id: String(r.id),
+        contact_a_id: String(r.contact_a_id),
+        contact_b_id: String(r.contact_b_id),
+        contact_a_name: r.contact_a?.name ?? "(unknown)",
+        contact_b_name: r.contact_b?.name ?? "(unknown)",
+        kind: parseKind(r.kind) ?? "founder_investor",
+        stage: parseStage(r.stage),
+        context: r.context == null ? null : String(r.context),
+      };
+    });
+
+    const suggestions: WorkspaceSuggestionRow[] = (suggestionsRes.data ?? []).map(
+      (raw) => {
+        const r = raw as unknown as {
+          id: string;
+          title: string | null;
+          body: string | null;
+          status: string | null;
+          contact_a_id: string | null;
+          contact_b_id: string | null;
+          kind: string | null;
+          score: number | string | null;
+          contact_a: { name: string | null } | null;
+          contact_b: { name: string | null } | null;
+        };
+        const score =
+          typeof r.score === "number"
+            ? r.score
+            : typeof r.score === "string"
+              ? Number.parseFloat(r.score) || null
+              : null;
+        return {
+          id: String(r.id),
+          title: r.title == null ? null : String(r.title),
+          body: r.body == null ? null : String(r.body),
+          status: String(r.status ?? "pending"),
+          contact_a_id:
+            r.contact_a_id == null ? null : String(r.contact_a_id),
+          contact_b_id:
+            r.contact_b_id == null ? null : String(r.contact_b_id),
+          contact_a_name: r.contact_a?.name ?? null,
+          contact_b_name: r.contact_b?.name ?? null,
+          kind: parseKind(r.kind),
+          score,
+        };
+      },
+    );
 
     return {
       organisations: (orgsRes.data ?? []) as WorkspaceOrganisationRow[],
-      deals: (dealsRes.data ?? []) as WorkspaceDealRow[],
-      suggestions: (suggestionsRes.data ?? []) as WorkspaceSuggestionRow[],
+      matches,
+      suggestions,
     };
   } catch (err) {
     if (process.env.NODE_ENV === "development") {

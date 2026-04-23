@@ -1,9 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { insertWorkspaceSuggestion } from "@/lib/data/workspace-mutations";
 
-const PAIR_TAG_V1_PREFIX = "rex_match_pair:v1:";
-const PAIR_TAG_V2_PREFIX = "rex_match_pair:v2:";
-
 const MIN_SCORE = 5;
 const PER_FOUNDER_CAP = 4;
 const PER_CAPITAL_CAP = 3;
@@ -190,51 +187,6 @@ function scorePair(
   };
 }
 
-function pairKey(idA: string, idB: string): string {
-  return [idA, idB].sort().join(":");
-}
-
-function dedupeTagForCandidate(c: Candidate): string {
-  return `${PAIR_TAG_V2_PREFIX}${c.kind}:${pairKey(c.founder.id, c.capital.id)}`;
-}
-
-/**
- * Loads every tag-keyed dedupe string across statuses so we never re-emit a
- * pair the user has already seen (pending), dismissed, or acted on.
- * Accepts both v1 (`rex_match_pair:v1:<pk>`) and v2
- * (`rex_match_pair:v2:<kind>:<pk>`) tags.
- */
-async function loadExistingDedupeKeys(
-  client: SupabaseClient,
-): Promise<Set<string>> {
-  const keys = new Set<string>();
-  const { data, error } = await client
-    .from("suggestions")
-    .select("body,status")
-    .or(
-      `body.ilike.${PAIR_TAG_V1_PREFIX}%,body.ilike.${PAIR_TAG_V2_PREFIX}%`,
-    );
-  if (error) throw error;
-  for (const row of data ?? []) {
-    const body = (row as { body: string | null }).body ?? "";
-    const line = body.split("\n")[0]?.trim() ?? "";
-    if (line.startsWith(PAIR_TAG_V2_PREFIX)) {
-      keys.add(line);
-      const parts = line.slice(PAIR_TAG_V2_PREFIX.length).split(":");
-      if (parts.length >= 3) {
-        const pk = parts.slice(1).join(":");
-        keys.add(`${PAIR_TAG_V1_PREFIX}${pk}`);
-      }
-    } else if (line.startsWith(PAIR_TAG_V1_PREFIX)) {
-      keys.add(line);
-      const pk = line.slice(PAIR_TAG_V1_PREFIX.length);
-      keys.add(`${PAIR_TAG_V2_PREFIX}founder_investor:${pk}`);
-      keys.add(`${PAIR_TAG_V2_PREFIX}founder_lender:${pk}`);
-    }
-  }
-  return keys;
-}
-
 async function fetchAllContactsForMatching(
   client: SupabaseClient,
 ): Promise<ContactForMatch[]> {
@@ -257,8 +209,57 @@ async function fetchAllContactsForMatching(
   return out;
 }
 
+function pairKey(idA: string, idB: string, kind: MatchKind): string {
+  return `${kind}:${[idA, idB].sort().join(":")}`;
+}
+
+/**
+ * Loads existing pending or acted (live match) pair keys so we never re-emit a
+ * pair that already has a suggestion or match in flight. Closed matches don't
+ * block — the same pair can be re-introduced later with a new context.
+ */
+async function loadExistingPairKeys(
+  client: SupabaseClient,
+): Promise<Set<string>> {
+  const keys = new Set<string>();
+
+  const { data: sugRows, error: sugErr } = await client
+    .from("suggestions")
+    .select("contact_a_id,contact_b_id,kind,status")
+    .in("status", ["pending", "acted"])
+    .not("contact_a_id", "is", null)
+    .not("contact_b_id", "is", null)
+    .not("kind", "is", null);
+  if (sugErr) throw sugErr;
+  for (const raw of sugRows ?? []) {
+    const r = raw as {
+      contact_a_id: string;
+      contact_b_id: string;
+      kind: string | null;
+    };
+    if (r.kind !== "founder_investor" && r.kind !== "founder_lender") continue;
+    keys.add(pairKey(r.contact_a_id, r.contact_b_id, r.kind));
+  }
+
+  const { data: matchRows, error: matchErr } = await client
+    .from("matches")
+    .select("contact_a_id,contact_b_id,kind,stage")
+    .neq("stage", "closed");
+  if (matchErr) throw matchErr;
+  for (const raw of matchRows ?? []) {
+    const r = raw as {
+      contact_a_id: string;
+      contact_b_id: string;
+      kind: string;
+    };
+    if (r.kind !== "founder_investor" && r.kind !== "founder_lender") continue;
+    keys.add(pairKey(r.contact_a_id, r.contact_b_id, r.kind));
+  }
+
+  return keys;
+}
+
 function buildSuggestionBody(c: Candidate): string {
-  const tag = dedupeTagForCandidate(c);
   const headline = `**${c.founder.name}** (founder) <> **${c.capital.name}** (${c.capitalSide})`;
 
   const why: string[] = [];
@@ -280,7 +281,7 @@ function buildSuggestionBody(c: Candidate): string {
   if (founderLine) warmth.push(`- ${c.founder.name}: ${founderLine}`);
   if (capitalLine) warmth.push(`- ${c.capital.name}: ${capitalLine}`);
 
-  const lines: string[] = [tag, "", headline];
+  const lines: string[] = [headline];
   if (why.length > 0) lines.push("", "Why this match", ...why);
   if (warmth.length > 0) lines.push("", "Warmth", ...warmth);
   return lines.join("\n");
@@ -365,7 +366,7 @@ export async function generateIntroMatchesForContact(
 
   const [allContacts, existingKeys] = await Promise.all([
     fetchAllContactsForMatching(client),
-    loadExistingDedupeKeys(client),
+    loadExistingPairKeys(client),
   ]);
 
   const others = allContacts.filter((c) => c.id !== subject.id);
@@ -420,18 +421,27 @@ export async function generateIntroMatchesForContact(
 
   for (const cand of candidates) {
     if (matches.length >= cap) break;
-    const tag = dedupeTagForCandidate(cand);
+    const key = pairKey(cand.founder.id, cand.capital.id, cand.kind);
     const counterparty =
       cand.founder.id === subject.id ? cand.capital : cand.founder;
     const counterpartySide = contactSide(counterparty) ?? "founder";
 
     let suggestionId: string | null = null;
-    if (!existingKeys.has(tag)) {
+    if (!existingKeys.has(key)) {
       const title = buildSuggestionTitle(cand);
       const body = buildSuggestionBody(cand);
-      const row = await insertWorkspaceSuggestion(client, { title, body });
-      suggestionId = row.id;
-      existingKeys.add(tag);
+      const row = await insertWorkspaceSuggestion(client, {
+        title,
+        body,
+        contact_a_id: cand.founder.id,
+        contact_b_id: cand.capital.id,
+        kind: cand.kind,
+        score: cand.score,
+      });
+      if (row) {
+        suggestionId = row.id;
+        existingKeys.add(key);
+      }
     }
 
     matches.push({
@@ -459,7 +469,7 @@ export async function generateIntroMatchSuggestions(
   const startedAt = Date.now();
   const [contacts, existingKeys] = await Promise.all([
     fetchAllContactsForMatching(client),
-    loadExistingDedupeKeys(client),
+    loadExistingPairKeys(client),
   ]);
 
   const founders: ContactForMatch[] = [];
@@ -520,8 +530,8 @@ export async function generateIntroMatchSuggestions(
 
   for (const cand of candidates) {
     if (created >= GLOBAL_CAP) break;
-    const tag = dedupeTagForCandidate(cand);
-    if (existingKeys.has(tag)) {
+    const key = pairKey(cand.founder.id, cand.capital.id, cand.kind);
+    if (existingKeys.has(key)) {
       skippedDuplicates += 1;
       continue;
     }
@@ -532,8 +542,20 @@ export async function generateIntroMatchSuggestions(
 
     const title = buildSuggestionTitle(cand);
     const body = buildSuggestionBody(cand);
-    await insertWorkspaceSuggestion(client, { title, body });
-    existingKeys.add(tag);
+    const row = await insertWorkspaceSuggestion(client, {
+      title,
+      body,
+      contact_a_id: cand.founder.id,
+      contact_b_id: cand.capital.id,
+      kind: cand.kind,
+      score: cand.score,
+    });
+    if (!row) {
+      // DB-side dedupe (unique index) caught a race; treat as duplicate.
+      skippedDuplicates += 1;
+      continue;
+    }
+    existingKeys.add(key);
     perFounder.set(cand.founder.id, fCount + 1);
     perCapital.set(cand.capital.id, cCount + 1);
     created += 1;

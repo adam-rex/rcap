@@ -1,13 +1,14 @@
 -- Static sample data for SQL Editor / supabase db reset.
 -- For repeatable, count-driven fake data use: npm run db:seed -- --help
 -- Inbound email–only Faker seed: npm run db:seed:emails -- --help
--- Order: contacts reference organisations; deals are standalone; extractions/attachments reference emails.
+-- Order: contacts reference organisations; matches/suggestions reference contacts; extractions/attachments reference emails.
 truncate table public.rex_email_extractions restart identity;
 truncate table public.rex_inbound_email_attachments restart identity;
 truncate table public.rex_inbound_emails restart identity;
-truncate table public.deal_stage_history restart identity;
+truncate table public.match_stage_history restart identity;
+truncate table public.matches restart identity;
+truncate table public.suggestions restart identity;
 truncate table public.contacts restart identity;
-truncate table public.deals restart identity;
 truncate table public.organisations restart identity;
 
 insert into public.organisations (id, name, type, description) values
@@ -16,16 +17,19 @@ insert into public.organisations (id, name, type, description) values
   ('a1000000-0000-4000-8000-000000000003', 'Summit Ridge Advisors', 'advisor', 'M&A advisory and capital placement for middle-market industrials.');
 
 insert into public.contacts (
-  name, organisation_id, role, deal_types, min_deal_size, max_deal_size,
-  sectors, geography, relationship_score, last_contact_date, notes, source
+  id, name, organisation_id, contact_type, role, deal_types, min_deal_size, max_deal_size,
+  sector, sectors, geography, relationship_score, last_contact_date, notes, source
 ) values
   (
+    'c1000000-0000-4000-8000-000000000001',
     'Jordan Lee',
     'a1000000-0000-4000-8000-000000000001',
+    'Investor',
     'Principal',
     array['growth_equity', 'venture']::text[],
     5000000,
     40000000,
+    'saas',
     array['saas', 'fintech']::text[],
     'United States',
     0.82,
@@ -34,53 +38,94 @@ insert into public.contacts (
     'conference'
   ),
   (
+    'c1000000-0000-4000-8000-000000000002',
     'Priya Sharma',
     'a1000000-0000-4000-8000-000000000001',
-    'Associate',
+    'Founder',
+    'CEO',
     array['venture']::text[],
     2000000,
     15000000,
+    'healthcare_it',
     array['healthcare_it', 'saas']::text[],
     'US / Canada',
     0.64,
     '2026-02-02',
-    'Follow up on data room for the logistics automation deal.',
+    'Building a clinical workflow tool for radiology groups; raising Series A.',
     'linkedin'
   ),
   (
+    'c1000000-0000-4000-8000-000000000003',
     'Marcus Webb',
     'a1000000-0000-4000-8000-000000000002',
+    'Lender',
     'Managing Director',
     array['co_invest', 'secondaries']::text[],
     10000000,
     75000000,
+    'industrials',
     array['industrials', 'business_services']::text[],
     'North America',
     0.91,
     '2026-04-01',
-    'Prefers control or significant minority with board rights.',
+    'Senior debt + unitranche; comfortable financing industrial roll-ups.',
     'referral'
   ),
   (
+    'c1000000-0000-4000-8000-000000000004',
     'Elena Vasquez',
     'a1000000-0000-4000-8000-000000000003',
-    'Director',
+    'Founder',
+    'Founder & CEO',
     array['m_and_a', 'private_placement']::text[],
     null,
     null,
+    'logistics',
     array['industrials', 'logistics']::text[],
     'US Midwest',
     0.77,
     '2026-03-28',
-    'Running sell-side for two founder-led manufacturers; open to strategic buyers.',
+    'Founder of a regional cold-chain operator; exploring growth equity to fund expansion.',
     'event'
   );
 
-insert into public.deals (title, size, deal_type, deal_stage, sector, structure, status, notes) values
-  ('Project Atlas — B2B payments platform', 28000000, 'equity deal', 'active', 'fintech', 'Series B preferred', 'diligence', 'Strong unit economics; key risk is enterprise sales cycle length.'),
-  ('Lumen Analytics recapitalization', 120000000, 'senior debt', 'matching', 'saas', 'majority_recap', 'ioi', 'Sponsor exploring add-on acquisitions in marketing analytics.'),
-  ('Harbor Freight co-invest (secondary)', 45000000, 'debt deal', 'prospect', 'logistics', 'secondary', 'passed', 'Passed on pricing; staying in touch for future stapled secondaries.'),
-  ('Midwest Cold Storage platform', 85000000, 'bridging', 'closed', 'industrials', 'buyout', 'live', 'Roll-up of regional cold chain assets; environmental capex plan in data room.');
+insert into public.matches (
+  id, contact_a_id, contact_b_id, kind, stage, outcome, context, notes
+) values
+  (
+    'd1000000-0000-4000-8000-000000000001',
+    'c1000000-0000-4000-8000-000000000002',
+    'c1000000-0000-4000-8000-000000000001',
+    'founder_investor',
+    'introduced',
+    null,
+    'Priya Sharma (healthcare IT founder) × Jordan Lee (growth investor). Vertical SaaS thesis fit; warm intro queued.',
+    'Send deck and Q1 cohort retention numbers ahead of first call.'
+  ),
+  (
+    'd1000000-0000-4000-8000-000000000002',
+    'c1000000-0000-4000-8000-000000000004',
+    'c1000000-0000-4000-8000-000000000003',
+    'founder_lender',
+    'active',
+    null,
+    'Elena Vasquez (cold-chain founder) × Marcus Webb (lender). Senior debt facility under term-sheet discussion.',
+    'IC scheduled next Thursday; covenants pending revised model.'
+  );
+
+insert into public.suggestions (
+  id, title, body, status, contact_a_id, contact_b_id, kind, score
+) values
+  (
+    'b1000000-0000-4000-8000-000000000001',
+    'Priya Sharma <> Marcus Webb',
+    E'**Priya Sharma** (founder) <> **Marcus Webb** (lender)\n- Sector overlap: healthcare_it / industrials\n- Geography: US / Canada / North America\n- Match score: 0.71',
+    'pending',
+    'c1000000-0000-4000-8000-000000000002',
+    'c1000000-0000-4000-8000-000000000003',
+    'founder_lender',
+    0.71
+  );
 
 insert into public.rex_inbound_emails (
   id, received_at, from_name, from_address, to_addresses, subject, body_text, snippet, external_message_id, thread_participant_count
@@ -133,15 +178,6 @@ insert into public.rex_email_extractions (
     'Shawbrook Bank · Bridging & RE finance · £5–20M · UK',
     null,
     '{"name":"Marcus Peel","organisationName":"Shawbrook Bank","role":"Bridging & RE finance","geography":"UK","notes":"£5–20M ticket; UK focus."}'::jsonb
-  ),
-  (
-    'e2000000-0000-4000-8000-000000000003',
-    'deal_signal',
-    'pending',
-    'Bridging — Manchester logistics asset',
-    '~£8M · 12 month term · mentioned as live requirement',
-    null,
-    '{"title":"Bridging — Manchester logistics asset","size":8000000,"dealType":"bridging","structure":"bridging","sector":"logistics","status":"live","notes":"12 month term; live requirement per thread."}'::jsonb
   );
 
 insert into public.rex_inbound_email_attachments (

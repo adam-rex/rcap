@@ -4,7 +4,6 @@ export const WORKSPACE_EMAILS_PAGE_SIZE_MAX = 50;
 export type RexEmailExtractionKind =
   | "contact"
   | "organisation"
-  | "deal_signal"
   | "intro_request";
 
 export type RexEmailExtractionStatus = "pending" | "applied" | "dismissed";
@@ -19,7 +18,6 @@ export type WorkspaceEmailExtractionListItem = {
   payload: Record<string, unknown>;
   createdContactId: string | null;
   createdOrganisationId: string | null;
-  createdDealId: string | null;
   createdSuggestionId: string | null;
 };
 

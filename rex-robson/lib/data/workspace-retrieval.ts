@@ -2,11 +2,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   buildSearchPatternsFromQuery,
   fetchContactsByPatterns,
-  fetchDealsByPatterns,
+  fetchMatchesByPatterns,
   fetchOrganisationsByPatterns,
   fetchPendingSuggestionsByPatterns,
   fetchRecentContactsPreview,
-  fetchRecentDealsPreview,
+  fetchRecentMatchesPreview,
   looksLikeExploratoryWorkspaceQuery,
   safeIlikePattern,
 } from "./workspace-query-helpers";
@@ -25,6 +25,28 @@ function formatContactLine(c: Record<string, unknown>): string {
   return meta ? `- **${name}** — ${meta}` : `- **${name}**`;
 }
 
+function contactName(raw: unknown): string {
+  if (raw && typeof raw === "object" && "name" in raw) {
+    const n = (raw as { name?: unknown }).name;
+    if (typeof n === "string" && n.length > 0) return n;
+  }
+  return "(unknown)";
+}
+
+function formatMatchLine(m: Record<string, unknown>): string {
+  const a = contactName(m.contact_a);
+  const b = contactName(m.contact_b);
+  const bits = [
+    m.stage ? String(m.stage) : null,
+    m.kind ? String(m.kind) : null,
+    m.outcome ? `outcome: ${String(m.outcome)}` : null,
+    m.context ? String(m.context).slice(0, 120) : null,
+  ].filter(Boolean);
+  return bits.length
+    ? `- **${a} ↔ ${b}** — ${bits.join(" · ")}`
+    : `- **${a} ↔ ${b}**`;
+}
+
 /**
  * Full deterministic scan (same ILIKE strategy as tool handlers), formatted for reconciliation.
  * Uses multi-token patterns plus optional recent-row preview for exploratory questions.
@@ -38,37 +60,39 @@ export async function buildWorkspaceRetrievalContext(
       "## Deterministic workspace retrieval",
       "",
       "No searchable text after sanitizing the query (empty or only wildcards).",
-      "Tell the user to enter a name, company, deal title, or keyword.",
+      "Tell the user to enter a name, company, or keyword.",
     ].join("\n");
   }
 
   const patterns = buildSearchPatternsFromQuery(query);
 
-  let [contacts, orgs, deals, suggestions] = await Promise.all([
+  const [contactsInitial, orgs, matchesInitial, suggestions] = await Promise.all([
     fetchContactsByPatterns(supabase, patterns, PER_TABLE),
     fetchOrganisationsByPatterns(supabase, patterns, PER_TABLE),
-    fetchDealsByPatterns(supabase, patterns, PER_TABLE),
+    fetchMatchesByPatterns(supabase, patterns, PER_TABLE),
     fetchPendingSuggestionsByPatterns(supabase, patterns, PER_TABLE),
   ]);
+  let contacts = contactsInitial;
+  let matches = matchesInitial;
 
   let exploratoryNote = "";
   const allEmpty =
     contacts.length === 0 &&
     orgs.length === 0 &&
-    deals.length === 0 &&
+    matches.length === 0 &&
     suggestions.length === 0;
 
   if (allEmpty && looksLikeExploratoryWorkspaceQuery(query)) {
-    const [recentC, recentD] = await Promise.all([
+    const [recentC, recentM] = await Promise.all([
       fetchRecentContactsPreview(supabase, 8),
-      fetchRecentDealsPreview(supabase, 8),
+      fetchRecentMatchesPreview(supabase, 8),
     ]);
-    if (recentC.length > 0 || recentD.length > 0) {
+    if (recentC.length > 0 || recentM.length > 0) {
       contacts = recentC;
-      deals = recentD;
+      matches = recentM;
       exploratoryNote = [
         "",
-        "_Exploratory context: keyword scan returned no rows; showing a small **recent** sample of contacts and deals so you can reason about matches and intros without inventing data._",
+        "_Exploratory context: keyword scan returned no rows; showing a small **recent** sample of contacts and matches so you can reason about intros without inventing data._",
         "",
       ].join("\n");
     }
@@ -106,19 +130,12 @@ export async function buildWorkspaceRetrievalContext(
   }
   lines.push("");
 
-  lines.push(`### Deals (${deals.length})`);
-  if (deals.length === 0) {
+  lines.push(`### Matches (${matches.length})`);
+  if (matches.length === 0) {
     lines.push("_None matched._");
   } else {
-    for (const d of deals) {
-      const bits = [
-        d.status ? String(d.status) : null,
-        d.sector ? String(d.sector) : null,
-        d.structure ? String(d.structure) : null,
-        d.size != null ? `£${d.size}` : null,
-      ].filter(Boolean);
-      const title = d.title ? String(d.title) : "(untitled deal)";
-      lines.push(bits.length ? `- **${title}** — ${bits.join(" · ")}` : `- **${title}**`);
+    for (const m of matches) {
+      lines.push(formatMatchLine(m));
     }
   }
   lines.push("");

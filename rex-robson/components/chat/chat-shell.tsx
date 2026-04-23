@@ -24,14 +24,15 @@ const WORKSPACE_DISPLAY_KEY = "rex-workspace-display";
 const ZERO_STATS: RexDashboardStats = {
   contactCount: 0,
   organisationCount: 0,
-  openDealCount: 0,
+  openMatchCount: 0,
+  activeMatchCount: 0,
   suggestionsPendingCount: 0,
   suggestionTotalCount: 0,
 };
 
 const EMPTY_WORKSPACE: WorkspaceLists = {
   organisations: [],
-  deals: [],
+  matches: [],
   suggestions: [],
 };
 
