@@ -121,12 +121,41 @@ export type StructuredSuggestionRow = {
   score: number;
 };
 
+export type RexTaskType =
+  | "draft_intro_email"
+  | "compile_match_brief"
+  | "research_counterparty"
+  | "summarise_call_notes"
+  | "custom";
+
+export type RexTaskStatus =
+  | "pending"
+  | "running"
+  | "done"
+  | "dismissed"
+  | "failed";
+
 export type RexTaskRow = {
   title: string;
   detail: string | null;
-  status: "pending" | "running" | "done" | "dismissed";
+  status: RexTaskStatus;
   source: "manual" | "meeting_note" | "email" | "import";
   due_at: string | null;
+  task_type: RexTaskType;
+  prompt: string | null;
+  output: string | null;
+  output_format:
+    | "email_draft"
+    | "brief"
+    | "research"
+    | "summary"
+    | "note"
+    | null;
+  error: string | null;
+  match_id: string | null;
+  contact_id: string | null;
+  started_at: string | null;
+  completed_at: string | null;
 };
 
 export function createOrganisations(num: number): OrganisationRow[] {
@@ -325,41 +354,178 @@ export function createStructuredSuggestions(
   return rows;
 }
 
-export function createRexTasks(num: number): RexTaskRow[] {
+const TASK_TEMPLATES: Array<{
+  type: RexTaskType;
+  title: string;
+  outputFormat: RexTaskRow["output_format"];
+  needsMatch: boolean;
+  prompts: string[];
+  doneOutput: (ctx: { a: string; b: string }) => string;
+}> = [
+  {
+    type: "compile_match_brief",
+    title: "Compile match brief",
+    outputFormat: "brief",
+    needsMatch: true,
+    prompts: [
+      "Emphasise sector fit and any open questions on team.",
+      "Flag geography mismatch if any; keep it under 300 words.",
+      "Highlight what we still need to diligence before an intro.",
+      "Stress cheque-size fit and recent fund activity.",
+    ],
+    doneOutput: ({ a, b }) =>
+      `## Overview\n${a} (founder) and ${b} (capital provider) line up on sector and cheque size. Early stage, warm signals on both sides.\n\n## Founder snapshot\n- Sector aligned with capital mandate\n- Cheque need sits inside counterparty range\n- Team complete; technical founder on product\n\n## Capital snapshot\n- Active deployer this quarter\n- Thesis overlaps with founder's go-to-market\n- Prior deals in adjacent sectors\n\n## Why this match\n- Sector and stage fit\n- Deal size overlap is comfortable, not a stretch\n- Geography is workable\n- Warm in both CRMs\n\n## Open questions\n- Founder's revenue milestone for next raise?\n- Capital's current reserves for follow-ons?\n- Timing — does ${b} deploy this quarter?`,
+  },
+  {
+    type: "draft_intro_email",
+    title: "Draft intro email",
+    outputFormat: "email_draft",
+    needsMatch: true,
+    prompts: [
+      "Warm tone, casual sign-off, ask for a 20-minute intro call.",
+      "Keep it tight, three short paragraphs.",
+      "Professional tone, no emoji, focus on sector fit.",
+    ],
+    doneOutput: ({ a, b }) =>
+      `Subject: Intro — ${a} x ${b}\n\nHi both,\n\nWanted to put you two in touch — ${a} is building in an area that lines up cleanly with ${b}'s current mandate, and the cheque-size range overlaps without either side stretching.\n\nI'll let you take it from here. Happy to jump on a short call if useful.\n\n— The Robson Capital team`,
+  },
+  {
+    type: "research_counterparty",
+    title: "Research counterparty",
+    outputFormat: "research",
+    needsMatch: false,
+    prompts: [
+      "Recent raises, portfolio overlap, press mentions.",
+      "Focus on their current deployment pace and sector bets.",
+    ],
+    doneOutput: ({ b }) =>
+      `## Snapshot\n${b} is an active capital provider with a consistent cadence over the last 12 months. Mandate lines up with our pipeline in fintech-adjacent and climate sectors.\n\n## What we know\n- Deal sizes: mid-market range, fits our current founders\n- Sectors: overlap on two of our top three themes\n- Geography: UK-first, selective in EU\n- Warmth: worked with the team on a prior referral\n\n## Known gaps\n- Reserve capacity for follow-ons this cycle\n- Any sector-specific pauses we should know about\n- Preferred board / observer dynamics\n\n## Suggested next steps\n- 20-minute catch-up before we introduce\n- Send them the match brief ahead of the call`,
+  },
+  {
+    type: "summarise_call_notes",
+    title: "Summarise call notes",
+    outputFormat: "summary",
+    needsMatch: false,
+    prompts: [
+      "Team sync — founder walked through Q3 numbers. Happy with pipeline, cautious on hiring. Capital side wants more visibility on churn before moving on terms. Action: follow up with cohort data by Friday.",
+      "Intro call went well; both sides engaged. Founder flagged timing constraint (wants signal in 6 weeks). Capital is happy to run a follow-up meeting with two of their partners. Owner: deal team to coordinate.",
+    ],
+    doneOutput: () =>
+      `## TL;DR\nCall was warm. Both sides want a follow-up next week; a few diligence items outstanding but nothing blocking.\n\n## Key points\n- Founder walked through Q3 numbers — pipeline healthy\n- Capital pushed on churn visibility before any term discussion\n- Timing constraint: founder wants signal in ~6 weeks\n- Capital offered to loop in two partners next round\n- No objections on sector fit\n\n## Action items\n- Follow up with cohort data — Deal team — by Friday\n- Schedule partner sync — Capital side — next week\n- Refresh match brief with new numbers — Rex — before partner call\n\n## Sentiment\nWarm. Both sides came out more positive than going in; the only yellow flag is timing.`,
+  },
+  {
+    type: "custom",
+    title: "Custom task",
+    outputFormat: "note",
+    needsMatch: false,
+    prompts: [
+      "Check whether any of our contacts overlap with this match's investor base.",
+      "Suggest two comparable matches we've closed in the last 12 months to anchor expectations.",
+      "Flag anything in the notes that looks like it might block the intro.",
+    ],
+    doneOutput: () =>
+      `No obvious blockers in the notes. One contact overlap worth flagging — a partner on the capital side previously co-invested with someone in our network. Could be a warm relay if needed. Two comparables from the last year: both closed inside 8 weeks from intro.`,
+  },
+];
+
+/**
+ * Produce Rex tasks that live on real matches (template rows) plus a handful
+ * of standalone ones (custom / research / call-notes) for the cross-match
+ * queue. Mix of statuses so Running / Queued / Done / Failed / Dismissed all
+ * have content in the UI.
+ */
+export function createRexTasks(
+  num: number,
+  matches: MatchRow[] = [],
+  contacts: ContactRow[] = [],
+): RexTaskRow[] {
   const rows: RexTaskRow[] = [];
-  const verb = ["Draft", "Prepare", "Review", "Compile", "Send"];
-  const nouns = [
-    "match brief",
-    "follow-up list",
-    "intro note",
-    "lender fit summary",
-    "meeting recap",
-  ];
+  const contactById = new Map(contacts.map((c) => [c.id, c]));
   for (let i = 0; i < num; i += 1) {
-    const title = `${faker.helpers.arrayElement(verb)} ${faker.helpers.arrayElement(nouns)} for ${faker.company.name()}`;
-    const source = faker.helpers.arrayElement([
-      "manual",
-      "meeting_note",
-      "email",
-      "import",
-    ] as const);
-    const status = faker.helpers.arrayElement([
-      "pending",
-      "pending",
-      "running",
-      "done",
-      "dismissed",
-    ] as const);
+    // Prefer match-scoped tasks when we have matches to hang them on.
+    const wantsMatch =
+      matches.length > 0 && faker.datatype.boolean({ probability: 0.8 });
+    const template = wantsMatch
+      ? faker.helpers.arrayElement(
+          TASK_TEMPLATES.filter(
+            (t) => t.needsMatch || t.type !== "summarise_call_notes",
+          ),
+        )
+      : faker.helpers.arrayElement(
+          TASK_TEMPLATES.filter((t) => !t.needsMatch),
+        );
+
+    const match =
+      wantsMatch && matches.length > 0
+        ? faker.helpers.arrayElement(matches)
+        : null;
+    const matchA = match ? contactById.get(match.contact_a_id) : undefined;
+    const matchB = match ? contactById.get(match.contact_b_id) : undefined;
+
+    // Bias distribution so every bucket has at least some content in a
+    // default seed but "pending" / "done" dominate.
+    const status = faker.helpers.weightedArrayElement<RexTaskStatus>([
+      { value: "pending", weight: 3 },
+      { value: "done", weight: 4 },
+      { value: "running", weight: 1 },
+      { value: "failed", weight: 1 },
+      { value: "dismissed", weight: 1 },
+    ]);
+
+    const prompt = faker.helpers.arrayElement(template.prompts);
+
+    const createdAt = faker.date.recent({ days: 14 });
+    const startedAt =
+      status === "pending"
+        ? null
+        : faker.date.between({
+            from: createdAt,
+            to: new Date(createdAt.getTime() + 1000 * 60 * 5),
+          });
+    const completedAt =
+      status === "done" || status === "failed" || status === "dismissed"
+        ? faker.date.between({
+            from: startedAt ?? createdAt,
+            to: new Date((startedAt ?? createdAt).getTime() + 1000 * 60 * 15),
+          })
+        : null;
+
+    const aName = matchA?.name ?? "Side A";
+    const bName = matchB?.name ?? "Side B";
+
+    const output =
+      status === "done"
+        ? template.doneOutput({ a: aName, b: bName })
+        : null;
+    const error =
+      status === "failed"
+        ? "Executor timed out — Anthropic returned no text. Retry when the model warms up."
+        : null;
+
     const dueAt =
-      faker.datatype.boolean({ probability: 0.6 }) && status !== "done"
+      (status === "pending" || status === "running") &&
+      faker.datatype.boolean({ probability: 0.5 })
         ? faker.date.soon({ days: 10 }).toISOString()
         : null;
+
     rows.push({
-      title,
-      detail: faker.lorem.sentence({ min: 8, max: 20 }),
-      source,
+      title: template.title,
+      detail: faker.datatype.boolean({ probability: 0.3 })
+        ? faker.lorem.sentence({ min: 6, max: 14 })
+        : null,
+      source: "manual",
       status,
       due_at: dueAt,
+      task_type: template.type,
+      prompt,
+      output,
+      output_format:
+        status === "done" ? template.outputFormat : null,
+      error,
+      match_id: match ? match.id : null,
+      contact_id: null,
+      started_at: startedAt ? startedAt.toISOString() : null,
+      completed_at: completedAt ? completedAt.toISOString() : null,
     });
   }
   return rows;

@@ -55,3 +55,46 @@ export type Suggestion = {
   score: number | null;
   created_at: string;
 };
+
+export type RexTaskStatus =
+  | "pending"
+  | "running"
+  | "done"
+  | "dismissed"
+  | "failed";
+
+export type RexTaskSource = "manual" | "meeting_note" | "email" | "import";
+
+export type RexTaskType =
+  | "draft_intro_email"
+  | "compile_match_brief"
+  | "research_counterparty"
+  | "summarise_call_notes"
+  | "custom";
+
+export type RexTaskOutputFormat =
+  | "email_draft"
+  | "brief"
+  | "research"
+  | "summary"
+  | "note";
+
+export type RexTask = {
+  id: string;
+  title: string;
+  detail: string | null;
+  status: RexTaskStatus;
+  source: RexTaskSource;
+  task_type: RexTaskType;
+  prompt: string | null;
+  output: string | null;
+  output_format: RexTaskOutputFormat | null;
+  error: string | null;
+  match_id: string | null;
+  contact_id: string | null;
+  due_at: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};

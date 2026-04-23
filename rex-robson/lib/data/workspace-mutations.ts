@@ -1,6 +1,16 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { tryCreateServiceRoleClient } from "@/lib/supabase/service-role";
+import {
+  fetchWorkspaceTaskByIdWithClient,
+  mapTaskRow,
+} from "@/lib/data/workspace-tasks";
+import type {
+  WorkspaceTaskOutputFormat,
+  WorkspaceTaskRow,
+  WorkspaceTaskStatus,
+  WorkspaceTaskType,
+} from "@/lib/data/workspace-tasks.types";
 
 export async function getWorkspaceWriteClient(): Promise<SupabaseClient> {
   return tryCreateServiceRoleClient() ?? (await createServerSupabaseClient());
@@ -639,26 +649,31 @@ export async function acceptSuggestionAsMatch(
   return { ok: true, match, suggestion };
 }
 
-export type CreatedRexTaskRow = {
-  id: string;
+export type InsertWorkspaceTaskInput = {
   title: string;
   detail: string | null;
-  status: "pending" | "running" | "done" | "dismissed";
   source: "manual" | "meeting_note" | "email" | "import";
   due_at: string | null;
-  created_at: string;
-  updated_at: string;
+  task_type: WorkspaceTaskType;
+  prompt: string | null;
+  match_id: string | null;
+  contact_id: string | null;
 };
+
+const TASK_INSERT_RETURN_COLUMNS =
+  "id,title,detail,status,source,task_type,prompt,output,output_format,error," +
+  "match_id,contact_id,due_at,started_at,completed_at,created_at,updated_at," +
+  "match:matches!rex_tasks_match_id_fkey(" +
+    "id," +
+    "contact_a:contacts!matches_contact_a_id_fkey(id,name)," +
+    "contact_b:contacts!matches_contact_b_id_fkey(id,name)" +
+  ")," +
+  "contact:contacts!rex_tasks_contact_id_fkey(id,name)";
 
 export async function insertWorkspaceTask(
   client: SupabaseClient,
-  input: {
-    title: string;
-    detail: string | null;
-    source: "manual" | "meeting_note" | "email" | "import";
-    due_at: string | null;
-  },
-): Promise<CreatedRexTaskRow> {
+  input: InsertWorkspaceTaskInput,
+): Promise<WorkspaceTaskRow> {
   const { data, error } = await client
     .from("rex_tasks")
     .insert({
@@ -667,38 +682,89 @@ export async function insertWorkspaceTask(
       source: input.source,
       due_at: input.due_at,
       status: "pending",
+      task_type: input.task_type,
+      prompt: input.prompt,
+      match_id: input.match_id,
+      contact_id: input.contact_id,
     })
-    .select("id,title,detail,status,source,due_at,created_at,updated_at")
+    .select(TASK_INSERT_RETURN_COLUMNS)
     .single();
 
   if (error) throw error;
   if (!data) throw new Error("Insert returned no row");
 
-  const statusRaw = data.status;
-  const status =
-    statusRaw === "pending" ||
-    statusRaw === "running" ||
-    statusRaw === "done" ||
-    statusRaw === "dismissed"
-      ? statusRaw
-      : "pending";
-  const sourceRaw = data.source;
-  const source =
-    sourceRaw === "manual" ||
-    sourceRaw === "meeting_note" ||
-    sourceRaw === "email" ||
-    sourceRaw === "import"
-      ? sourceRaw
-      : "manual";
+  return mapTaskRow(data as unknown as Record<string, unknown>);
+}
 
-  return {
-    id: String(data.id ?? ""),
-    title: String(data.title ?? ""),
-    detail: data.detail == null ? null : String(data.detail),
-    status,
-    source,
-    due_at: data.due_at == null ? null : String(data.due_at),
-    created_at: data.created_at == null ? "" : String(data.created_at),
-    updated_at: data.updated_at == null ? "" : String(data.updated_at),
-  };
+export async function markWorkspaceTaskRunning(
+  client: SupabaseClient,
+  id: string,
+): Promise<void> {
+  const { error } = await client
+    .from("rex_tasks")
+    .update({
+      status: "running" as WorkspaceTaskStatus,
+      started_at: new Date().toISOString(),
+      error: null,
+    })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function markWorkspaceTaskDone(
+  client: SupabaseClient,
+  id: string,
+  output: { text: string; format: WorkspaceTaskOutputFormat },
+): Promise<WorkspaceTaskRow | null> {
+  const now = new Date().toISOString();
+  const { error } = await client
+    .from("rex_tasks")
+    .update({
+      status: "done" as WorkspaceTaskStatus,
+      output: output.text,
+      output_format: output.format,
+      error: null,
+      completed_at: now,
+    })
+    .eq("id", id);
+  if (error) throw error;
+  return fetchWorkspaceTaskByIdWithClient(client, id);
+}
+
+export async function markWorkspaceTaskFailed(
+  client: SupabaseClient,
+  id: string,
+  message: string,
+): Promise<WorkspaceTaskRow | null> {
+  const now = new Date().toISOString();
+  const { error } = await client
+    .from("rex_tasks")
+    .update({
+      status: "failed" as WorkspaceTaskStatus,
+      error: message.slice(0, 2000),
+      completed_at: now,
+    })
+    .eq("id", id);
+  if (error) throw error;
+  return fetchWorkspaceTaskByIdWithClient(client, id);
+}
+
+export async function updateWorkspaceTaskStatus(
+  client: SupabaseClient,
+  id: string,
+  status: Extract<WorkspaceTaskStatus, "pending" | "dismissed">,
+): Promise<WorkspaceTaskRow | null> {
+  const patch: Record<string, unknown> = { status };
+  if (status === "pending") {
+    patch.error = null;
+    patch.completed_at = null;
+  } else if (status === "dismissed") {
+    patch.completed_at = new Date().toISOString();
+  }
+  const { error } = await client
+    .from("rex_tasks")
+    .update(patch)
+    .eq("id", id);
+  if (error) throw error;
+  return fetchWorkspaceTaskByIdWithClient(client, id);
 }

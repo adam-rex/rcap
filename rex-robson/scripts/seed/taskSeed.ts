@@ -1,5 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { createRexTasks, type RexTaskRow } from "./factories";
+import {
+  createRexTasks,
+  type ContactRow,
+  type MatchRow,
+  type RexTaskRow,
+} from "./factories";
 
 const DUMMY = "00000000-0000-0000-0000-000000000000";
 const CHUNK = 100;
@@ -23,18 +28,20 @@ async function insertChunked(
 export type SeedRexTaskOptions = {
   count: number;
   append: boolean;
+  matches?: MatchRow[];
+  contacts?: ContactRow[];
 };
 
 export async function seedRexTasks(
   supabase: SupabaseClient,
   options: SeedRexTaskOptions,
 ): Promise<RexTaskRow[]> {
-  const { count, append } = options;
+  const { count, append, matches = [], contacts = [] } = options;
   if (count <= 0) return [];
   if (!append) {
     await deleteAllTasks(supabase);
   }
-  const rows = createRexTasks(count);
+  const rows = createRexTasks(count, matches, contacts);
   await insertChunked(supabase, rows);
   return rows;
 }

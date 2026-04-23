@@ -1,7 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 export const WORKSPACE_FORM_INPUT_CLASS =
   "w-full rounded-lg border border-charcoal/15 bg-cream px-3 py-2 text-sm text-charcoal placeholder:text-charcoal-light/50 outline-none ring-charcoal/20 focus:border-charcoal/25 focus:ring-2";
@@ -32,6 +33,12 @@ export function WorkspaceCreateDialog({
   onClose,
   children,
 }: WorkspaceCreateDialogProps) {
+  // Mount-detect so we only call createPortal client-side (avoids SSR mismatch).
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -41,10 +48,21 @@ export function WorkspaceCreateDialog({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
-  if (!open) return null;
+  if (!open || !mounted) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4">
+  // Portaling to document.body decouples the overlay from any draggable/clickable
+  // ancestor in the React tree (e.g. match-canvas cards), so dragstart on a button
+  // inside the dialog can't bubble into the card and trigger a stage move.
+  return createPortal(
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4"
+      draggable={false}
+      onMouseDown={(e) => e.stopPropagation()}
+      onDragStart={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
+    >
       <button
         type="button"
         className="absolute inset-0 bg-charcoal/40 backdrop-blur-[2px]"
@@ -75,6 +93,7 @@ export function WorkspaceCreateDialog({
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

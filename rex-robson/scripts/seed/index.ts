@@ -190,6 +190,8 @@ export async function seedDatabase(
   const tasks = await seedRexTasks(supabase, {
     count: taskCount,
     append: true,
+    matches,
+    contacts,
   });
 
   return {

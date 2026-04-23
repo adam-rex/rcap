@@ -17,6 +17,7 @@ import {
   WORKSPACE_FORM_LABEL_CLASS,
   WorkspaceCreateDialog,
 } from "./workspace-create-dialog";
+import { MatchRexTasks } from "./match-rex-tasks";
 
 type ApiOk = { rows: WorkspaceMatchPageRow[]; total: number };
 type ApiErr = { error?: string; hint?: string };
@@ -569,6 +570,7 @@ export function MatchCanvasPanel() {
                           </p>
                         ) : null}
                       </button>
+                      <MatchRexTasks matchId={m.id} />
                       <div className="mt-2 flex items-center gap-1.5">
                         {STAGES.filter((x) => x.id !== m.stage).map((target) => (
                           <button
