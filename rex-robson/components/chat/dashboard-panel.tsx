@@ -28,6 +28,24 @@ function formatCount(value: number): string {
   return value.toLocaleString();
 }
 
+/**
+ * Compact GBP formatter for dashboard tiles. Mirrors the look used in the
+ * intro-match suggestions copy ("£5.2M", "£750K") so the dashboard stays
+ * visually consistent with the rest of the product.
+ */
+function formatGbpCompact(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return "£0";
+  if (value >= 1_000_000) {
+    const m = Math.round(value / 100_000) / 10;
+    return `£${m.toLocaleString(undefined, { maximumFractionDigits: 1 })}M`;
+  }
+  if (value >= 1_000) {
+    const k = Math.round(value / 100) / 10;
+    return `£${k.toLocaleString(undefined, { maximumFractionDigits: 1 })}K`;
+  }
+  return `£${Math.round(value).toLocaleString()}`;
+}
+
 type MetricCardProps = {
   label: string;
   value: string;
@@ -281,6 +299,7 @@ export function DashboardPanel({
     contactCount,
     contactsNew30d,
     openMatchCount,
+    totalPipelineGbp,
     matchesByStage,
     matchesBySector,
     sectorTotalCount,
@@ -294,9 +313,9 @@ export function DashboardPanel({
       ? `+${formatCount(contactsNew30d)} in last 30 days`
       : "No new contacts in last 30 days";
 
-  const openSubline =
+  const pipelineSubline =
     openMatchCount > 0
-      ? `${formatCount(matchesByStage.introduced)} introduced, ${formatCount(activeMatchesCount)} active`
+      ? `Across ${formatCount(openMatchCount)} open match${openMatchCount === 1 ? "" : "es"}`
       : "No live matches on the canvas";
 
   const activeSubline =
@@ -329,9 +348,9 @@ export function DashboardPanel({
           icon={<Users className="size-3.5" strokeWidth={1.75} aria-hidden />}
         />
         <MetricCard
-          label="Open matches"
-          value={formatCount(openMatchCount)}
-          subline={openSubline}
+          label="Total pipeline"
+          value={formatGbpCompact(totalPipelineGbp)}
+          subline={pipelineSubline}
           icon={
             <Handshake className="size-3.5" strokeWidth={1.75} aria-hidden />
           }

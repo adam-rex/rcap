@@ -14,6 +14,12 @@ export type DashboardMetrics = {
   contactsNew30d: number;
   /** Open = stage in (introduced, active). */
   openMatchCount: number;
+  /**
+   * Total implied deal value (£) across all open (non-closed) matches.
+   * Derived per match from the overlap between founder and capital deal-size
+   * ranges; see `getDashboardMetrics` for the heuristic.
+   */
+  totalPipelineGbp: number;
   matchesByStage: MatchesByStage;
   matchesBySector: SectorBreakdownEntry[];
   sectorTotalCount: number;
@@ -34,6 +40,7 @@ export const ZERO_DASHBOARD_METRICS: DashboardMetrics = {
   contactCount: 0,
   contactsNew30d: 0,
   openMatchCount: 0,
+  totalPipelineGbp: 0,
   matchesByStage: { ...ZERO_MATCHES_BY_STAGE },
   matchesBySector: [],
   sectorTotalCount: 0,

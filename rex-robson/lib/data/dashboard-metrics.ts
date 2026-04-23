@@ -34,12 +34,16 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
       .select("*", { count: "exact", head: true })
       .gte("created_at", thirtyDaysAgoIso);
 
-    // For sector breakdown we join on contact_a so each match contributes one sector
-    // (the founder side, by convention). Pull the open matches only.
+    // For sector breakdown we join on contact_a so each match contributes one
+    // sector (the founder side, by convention). We also pull min/max deal size
+    // from both sides so we can derive an implied per-match deal value for the
+    // total pipeline tile.
     const matchRowsReq = client
       .from("matches")
       .select(
-        "stage,contact_a:contacts!matches_contact_a_id_fkey(sector)",
+        "stage," +
+          "contact_a:contacts!matches_contact_a_id_fkey(sector,min_deal_size,max_deal_size)," +
+          "contact_b:contacts!matches_contact_b_id_fkey(min_deal_size,max_deal_size)",
       );
 
     const suggestionsPendingReq = client
@@ -66,6 +70,7 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
 
     const matchesByStage: MatchesByStage = { ...ZERO_MATCHES_BY_STAGE };
     let activeMatchesCount = 0;
+    let totalPipelineGbp = 0;
     const sectorAgg = new Map<string, { count: number; value: number }>();
     let sectorUnknownCount = 0;
     let sectorTotalCount = 0;
@@ -73,7 +78,19 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
     for (const raw of matchRows ?? []) {
       const row = raw as unknown as {
         stage: string | null;
-        contact_a: { sector: string | null } | null;
+        contact_a:
+          | {
+              sector: string | null;
+              min_deal_size: number | null;
+              max_deal_size: number | null;
+            }
+          | null;
+        contact_b:
+          | {
+              min_deal_size: number | null;
+              max_deal_size: number | null;
+            }
+          | null;
       };
       const stage = row.stage;
       if (stage === "introduced" || stage === "active" || stage === "closed") {
@@ -85,6 +102,9 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
       // shows where live opportunity sits today.
       const isOpen = stage !== "closed";
       if (!isOpen) continue;
+
+      totalPipelineGbp += impliedMatchValueGbp(row.contact_a, row.contact_b);
+
       sectorTotalCount += 1;
       const sectorName = (row.contact_a?.sector ?? "").trim();
       if (!sectorName) {
@@ -112,6 +132,7 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
       contactCount: contactCount ?? 0,
       contactsNew30d: contactsNew30d ?? 0,
       openMatchCount,
+      totalPipelineGbp,
       matchesByStage,
       matchesBySector,
       sectorTotalCount,
@@ -125,4 +146,49 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
     }
     return ZERO_DASHBOARD_METRICS;
   }
+}
+
+type DealRange = {
+  min_deal_size: number | null;
+  max_deal_size: number | null;
+} | null;
+
+/**
+ * Implied £ deal value for a single match. Matches don't store an explicit
+ * deal size, so we derive one from the founder/capital min–max ranges:
+ *   1. If the two ranges overlap, take the midpoint of that overlap.
+ *   2. Otherwise fall back to the smaller of the two range midpoints (the
+ *      tighter side caps what could realistically clear).
+ *   3. If only one side has data, use its midpoint; if neither side does,
+ *      this match contributes 0 to the pipeline total.
+ */
+function impliedMatchValueGbp(a: DealRange, b: DealRange): number {
+  const aRange = normaliseRange(a);
+  const bRange = normaliseRange(b);
+  if (!aRange && !bRange) return 0;
+  if (!aRange) return midpoint(bRange!);
+  if (!bRange) return midpoint(aRange);
+
+  const overlapLow = Math.max(aRange.low, bRange.low);
+  const overlapHigh = Math.min(aRange.high, bRange.high);
+  if (overlapLow <= overlapHigh) {
+    return (overlapLow + overlapHigh) / 2;
+  }
+  return Math.min(midpoint(aRange), midpoint(bRange));
+}
+
+function normaliseRange(
+  r: DealRange,
+): { low: number; high: number } | null {
+  if (!r) return null;
+  const min = typeof r.min_deal_size === "number" ? r.min_deal_size : null;
+  const max = typeof r.max_deal_size === "number" ? r.max_deal_size : null;
+  if (min == null && max == null) return null;
+  const low = min ?? max ?? 0;
+  const high = max ?? min ?? 0;
+  return low <= high ? { low, high } : { low: high, high: low };
+}
+
+function midpoint(r: { low: number; high: number }): number {
+  return (r.low + r.high) / 2;
 }
