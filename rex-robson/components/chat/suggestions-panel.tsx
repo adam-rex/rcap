@@ -76,6 +76,8 @@ function resultSummary(r: GenerateMatchesResult): string {
   return parts.join(" ");
 }
 
+type SuggestionsTab = "live" | "archived";
+
 export function SuggestionsPanel({ rows, isEmpty }: SuggestionsPanelProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -90,6 +92,21 @@ export function SuggestionsPanel({ rows, isEmpty }: SuggestionsPanelProps) {
   const [pendingActionIds, setPendingActionIds] = useState<Set<string>>(
     new Set(),
   );
+  const [activeTab, setActiveTab] = useState<SuggestionsTab>("live");
+  const [selectedScores, setSelectedScores] = useState<Set<number>>(new Set());
+
+  const toggleScore = useCallback((n: number) => {
+    setSelectedScores((prev) => {
+      const next = new Set(prev);
+      if (next.has(n)) next.delete(n);
+      else next.add(n);
+      return next;
+    });
+  }, []);
+
+  const clearScoreFilter = useCallback(() => {
+    setSelectedScores(new Set());
+  }, []);
 
   useEffect(() => {
     try {
@@ -199,18 +216,46 @@ export function SuggestionsPanel({ rows, isEmpty }: SuggestionsPanelProps) {
     [pendingActionIds, router],
   );
 
-  const visibleRows = useMemo(
-    () => rows.filter((r) => !hiddenIds.has(r.id)),
+  const liveRows = useMemo(
+    () =>
+      rows.filter((r) => r.status === "pending" && !hiddenIds.has(r.id)),
     [rows, hiddenIds],
   );
-  const visiblyEmpty = isEmpty || visibleRows.length === 0;
+  const archivedRows = useMemo(
+    () => rows.filter((r) => r.status === "dismissed"),
+    [rows],
+  );
+  const tabRows = activeTab === "live" ? liveRows : archivedRows;
+  const filteredRows = useMemo(() => {
+    if (selectedScores.size === 0) return tabRows;
+    return tabRows.filter((r) => {
+      if (typeof r.score !== "number") return false;
+      return selectedScores.has(scoreOutOfFive(r.score));
+    });
+  }, [tabRows, selectedScores]);
+  const scoreCounts = useMemo(() => {
+    const counts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    for (const r of tabRows) {
+      if (typeof r.score !== "number") continue;
+      const bucket = scoreOutOfFive(r.score);
+      counts[bucket] = (counts[bucket] ?? 0) + 1;
+    }
+    return counts;
+  }, [tabRows]);
+  const visibleRows = filteredRows;
+  const liveEmpty = isEmpty || liveRows.length === 0;
+  const archivedEmpty = archivedRows.length === 0;
+  const tabEmpty = activeTab === "live" ? liveEmpty : archivedEmpty;
+  const filterActive = selectedScores.size > 0;
+  const filteredEmpty = filterActive && filteredRows.length === 0;
+  const visiblyEmpty = tabEmpty || filteredEmpty;
 
   const buttonDisabled = isPending || throttleRemaining > 0;
   const buttonLabel = isPending
     ? "Generating…"
     : throttleRemaining > 0
       ? `Wait ${Math.ceil(throttleRemaining / 1000)}s`
-      : visiblyEmpty
+      : liveEmpty
         ? "Generate matches"
         : "Refresh suggestions";
 
@@ -222,9 +267,17 @@ export function SuggestionsPanel({ rows, isEmpty }: SuggestionsPanelProps) {
             Suggestions
           </h2>
           <p className="mt-1 text-xs text-charcoal-light/80">
-            {visiblyEmpty
-              ? "No suggestions pending — generate fresh founder <> investor and founder <> lender matches."
-              : `${visibleRows.length} row${visibleRows.length === 1 ? "" : "s"} from your workspace`}
+            {activeTab === "live"
+              ? liveEmpty
+                ? "No suggestions pending — generate fresh founder <> investor and founder <> lender matches."
+                : filterActive
+                  ? `${filteredRows.length} of ${liveRows.length} row${liveRows.length === 1 ? "" : "s"} match score filter`
+                  : `${liveRows.length} row${liveRows.length === 1 ? "" : "s"} from your workspace`
+              : archivedEmpty
+                ? "No archived suggestions yet — dismissed suggestions show up here."
+                : filterActive
+                  ? `${filteredRows.length} of ${archivedRows.length} archived match score filter`
+                  : `${archivedRows.length} archived suggestion${archivedRows.length === 1 ? "" : "s"}`}
           </p>
         </div>
         <div className="flex flex-col items-end gap-1">
@@ -247,6 +300,100 @@ export function SuggestionsPanel({ rows, isEmpty }: SuggestionsPanelProps) {
             </p>
           ) : null}
         </div>
+      </div>
+
+      <div
+        className="mb-4 inline-flex shrink-0 items-center gap-1 self-start rounded-lg border border-charcoal/[0.08] bg-cream-light/60 p-1 text-xs"
+        role="tablist"
+        aria-label="Suggestion views"
+      >
+        {(
+          [
+            { id: "live", label: "Live", count: liveRows.length },
+            { id: "archived", label: "Archived", count: archivedRows.length },
+          ] as const
+        ).map((tab) => {
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => setActiveTab(tab.id)}
+              className={
+                "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 font-medium transition-colors " +
+                (isActive
+                  ? "bg-charcoal text-cream"
+                  : "text-charcoal-light hover:text-charcoal")
+              }
+            >
+              <span>{tab.label}</span>
+              <span
+                className={
+                  "inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1 text-[10px] font-semibold " +
+                  (isActive
+                    ? "bg-cream/20 text-cream"
+                    : "bg-charcoal/[0.08] text-charcoal-light")
+                }
+              >
+                {tab.count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mb-4 flex shrink-0 flex-wrap items-center gap-2">
+        <span className="text-[11px] font-medium uppercase tracking-wide text-charcoal-light/70">
+          Score
+        </span>
+        <div
+          className="inline-flex items-center gap-1 rounded-lg border border-charcoal/[0.08] bg-cream-light/60 p-1"
+          role="group"
+          aria-label="Filter by score"
+        >
+          {([1, 2, 3, 4, 5] as const).map((n) => {
+            const isOn = selectedScores.has(n);
+            const count = scoreCounts[n] ?? 0;
+            return (
+              <button
+                key={n}
+                type="button"
+                onClick={() => toggleScore(n)}
+                aria-pressed={isOn}
+                title={`Show ${n}/5 suggestions`}
+                className={
+                  "inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors " +
+                  (isOn
+                    ? "bg-charcoal text-cream"
+                    : "text-charcoal-light hover:text-charcoal")
+                }
+              >
+                <span>{n}/5</span>
+                <span
+                  className={
+                    "inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1 text-[10px] font-semibold " +
+                    (isOn
+                      ? "bg-cream/20 text-cream"
+                      : "bg-charcoal/[0.08] text-charcoal-light")
+                  }
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        {filterActive ? (
+          <button
+            type="button"
+            onClick={clearScoreFilter}
+            className="text-[11px] font-medium text-charcoal-light underline-offset-2 hover:text-charcoal hover:underline"
+          >
+            Clear
+          </button>
+        ) : null}
       </div>
 
       {lastResult ? (
@@ -273,16 +420,52 @@ export function SuggestionsPanel({ rows, isEmpty }: SuggestionsPanelProps) {
           <span className="flex size-9 items-center justify-center rounded-full bg-charcoal/[0.06] text-charcoal-light">
             <Sparkles className="size-4" strokeWidth={1.75} aria-hidden />
           </span>
-          <p className="mt-4 max-w-md text-[15px] leading-relaxed text-charcoal">
-            {rexEmptySuggestions}
-          </p>
-          <p className="mt-3 max-w-md text-sm text-charcoal-light">
-            Hit{" "}
-            <span className="font-medium text-charcoal">Generate matches</span>{" "}
-            to scan your contacts for founder <span aria-hidden>&lt;&gt;</span>{" "}
-            investor and founder <span aria-hidden>&lt;&gt;</span> lender pairs
-            with overlapping sector, deal type, cheque size, or geography.
-          </p>
+          {filteredEmpty && !tabEmpty ? (
+            <>
+              <p className="mt-4 max-w-md text-[15px] leading-relaxed text-charcoal">
+                No suggestions match the selected score
+                {selectedScores.size === 1 ? "" : "s"}.
+              </p>
+              <p className="mt-3 max-w-md text-sm text-charcoal-light">
+                Try a different score or{" "}
+                <button
+                  type="button"
+                  onClick={clearScoreFilter}
+                  className="font-medium text-charcoal underline underline-offset-2"
+                >
+                  clear the filter
+                </button>
+                .
+              </p>
+            </>
+          ) : activeTab === "live" ? (
+            <>
+              <p className="mt-4 max-w-md text-[15px] leading-relaxed text-charcoal">
+                {rexEmptySuggestions}
+              </p>
+              <p className="mt-3 max-w-md text-sm text-charcoal-light">
+                Hit{" "}
+                <span className="font-medium text-charcoal">
+                  Generate matches
+                </span>{" "}
+                to scan your contacts for founder{" "}
+                <span aria-hidden>&lt;&gt;</span> investor and founder{" "}
+                <span aria-hidden>&lt;&gt;</span> lender pairs with overlapping
+                sector, deal type, cheque size, or geography.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="mt-4 max-w-md text-[15px] leading-relaxed text-charcoal">
+                No archived suggestions yet.
+              </p>
+              <p className="mt-3 max-w-md text-sm text-charcoal-light">
+                Suggestions you dismiss from the{" "}
+                <span className="font-medium text-charcoal">Live</span> tab
+                will show up here.
+              </p>
+            </>
+          )}
         </div>
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-charcoal/[0.08] bg-cream-light/40">
@@ -327,26 +510,38 @@ export function SuggestionsPanel({ rows, isEmpty }: SuggestionsPanelProps) {
                     {muted(s.body)}
                   </div>
                   <div className="flex shrink-0 items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => runAction(s.id, "accept")}
-                      disabled={acting}
-                      aria-label="Accept suggestion and create match"
-                      title="Accept & move to canvas"
-                      className="inline-flex size-8 items-center justify-center rounded-lg border border-charcoal/[0.08] bg-cream-light/60 text-charcoal transition-colors hover:bg-charcoal hover:text-cream disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      <Check className="size-4" strokeWidth={2} aria-hidden />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => runAction(s.id, "dismiss")}
-                      disabled={acting}
-                      aria-label="Dismiss suggestion"
-                      title="Dismiss"
-                      className="inline-flex size-8 items-center justify-center rounded-lg border border-charcoal/[0.08] bg-cream-light/60 text-charcoal-light transition-colors hover:bg-red-500 hover:text-white hover:border-red-500/40 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      <X className="size-4" strokeWidth={2} aria-hidden />
-                    </button>
+                    {activeTab === "live" ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => runAction(s.id, "accept")}
+                          disabled={acting}
+                          aria-label="Accept suggestion and create match"
+                          title="Accept & move to canvas"
+                          className="inline-flex size-8 items-center justify-center rounded-lg border border-charcoal/[0.08] bg-cream-light/60 text-charcoal transition-colors hover:bg-charcoal hover:text-cream disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <Check
+                            className="size-4"
+                            strokeWidth={2}
+                            aria-hidden
+                          />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => runAction(s.id, "dismiss")}
+                          disabled={acting}
+                          aria-label="Dismiss suggestion"
+                          title="Dismiss"
+                          className="inline-flex size-8 items-center justify-center rounded-lg border border-charcoal/[0.08] bg-cream-light/60 text-charcoal-light transition-colors hover:bg-red-500 hover:text-white hover:border-red-500/40 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <X className="size-4" strokeWidth={2} aria-hidden />
+                        </button>
+                      </>
+                    ) : (
+                      <span className="inline-flex items-center rounded-full border border-charcoal/10 bg-charcoal/[0.04] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-charcoal-light">
+                        Dismissed
+                      </span>
+                    )}
                   </div>
                 </li>
               );

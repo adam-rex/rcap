@@ -95,7 +95,7 @@ export async function getWorkspaceLists(): Promise<WorkspaceLists> {
       client
         .from("suggestions")
         .select(suggestionsSelect)
-        .eq("status", "pending")
+        .in("status", ["pending", "dismissed"])
         .order("created_at", { ascending: false })
         .limit(LIST_LIMIT),
     ]);
