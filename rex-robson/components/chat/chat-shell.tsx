@@ -1,5 +1,6 @@
 "use client";
 
+import { Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -250,6 +251,16 @@ export function ChatShell({
               Online
             </p>
           </div>
+          {!quickCaptureOpen ? (
+            <button
+              type="button"
+              onClick={onOpenQuickCapture}
+              className="lg:hidden -mr-0.5 flex size-10 shrink-0 items-center justify-center rounded-full border border-charcoal/[0.12] bg-charcoal text-cream shadow-sm transition-colors hover:bg-charcoal/90 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-charcoal/25 sm:-mr-1"
+              aria-label="Quick Capture — add a contact"
+            >
+              <Plus className="size-5" strokeWidth={2.25} aria-hidden />
+            </button>
+          ) : null}
           <div
             className="flex max-w-[min(100%,11rem)] shrink-0 flex-col gap-1 lg:hidden"
             role="presentation"
