@@ -1,6 +1,6 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { tryCreateServiceRoleClient } from "@/lib/supabase/service-role";
-import type { MatchKind, MatchStage } from "./workspace-matches-page.types";
+import type { MatchKind, OpportunityStage } from "./workspace-matches-page.types";
 
 const LIST_LIMIT = 80;
 
@@ -18,7 +18,7 @@ export type WorkspaceMatchRow = {
   contact_a_name: string;
   contact_b_name: string;
   kind: MatchKind;
-  stage: MatchStage;
+  stage: OpportunityStage;
   context: string | null;
 };
 
@@ -47,8 +47,8 @@ const empty: WorkspaceLists = {
   suggestions: [],
 };
 
-function parseStage(raw: unknown): MatchStage {
-  return raw === "active" || raw === "closed" ? raw : "introduced";
+function parseStage(raw: unknown): OpportunityStage {
+  return raw === "closed" ? "closed" : "introduced";
 }
 
 function parseKind(raw: unknown): MatchKind | null {

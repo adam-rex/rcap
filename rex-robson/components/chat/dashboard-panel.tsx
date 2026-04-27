@@ -75,9 +75,9 @@ function MetricCard({ label, value, subline, icon }: MetricCardProps) {
 const STAGE_ORDER: MatchStage[] = ["introduced", "active", "closed"];
 
 const STAGE_LABELS: Record<MatchStage, string> = {
-  introduced: "Introduced",
-  active: "Active",
-  closed: "Closed",
+  introduced: "Opportunities",
+  active: "Active deals",
+  closed: "Closed deals",
 };
 
 const STAGE_BAR_BG: Record<MatchStage, string> = {
@@ -103,7 +103,7 @@ function StageBreakdown({ matchesByStage }: StageBreakdownProps) {
     <div className="rounded-xl border border-charcoal/[0.08] bg-cream-light/60 p-5 shadow-[0_1px_0_rgba(0,0,0,0.02)]">
       <div className="flex items-center justify-between">
         <p className="text-[11px] font-medium uppercase tracking-wide text-charcoal-light/80">
-          Matches by stage
+          Pipeline snapshot
         </p>
         <p className="text-[11px] text-charcoal-light/70">
           {formatCount(total)} total

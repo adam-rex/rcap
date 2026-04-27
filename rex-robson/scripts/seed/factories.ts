@@ -62,7 +62,7 @@ const CONTACT_TYPES = [
 
 const MATCH_OUTCOMES = ["won", "lost", "passed"] as const;
 const MATCH_KINDS = ["founder_investor", "founder_lender"] as const;
-type MatchStage = "introduced" | "active" | "closed";
+type MatchStage = "introduced" | "closed";
 
 function pickMany<T extends readonly string[]>(
   pool: T,
@@ -111,6 +111,18 @@ export type MatchRow = {
   stage: MatchStage;
   outcome: (typeof MATCH_OUTCOMES)[number] | null;
   context: string;
+  notes: string | null;
+  introduction_at: string | null;
+  introduction_notes: string | null;
+};
+
+export type MatchTransactionSeedRow = {
+  id: string;
+  match_id: string;
+  title: string | null;
+  stage: "active" | "closed";
+  outcome: (typeof MATCH_OUTCOMES)[number] | null;
+  context: string | null;
   notes: string | null;
 };
 
@@ -267,12 +279,11 @@ export function createMatches(
   };
 
   const stagePlan: MatchStage[] = [];
-  const introCount = Math.ceil(num * 0.4);
-  const activeCount = Math.ceil(num * 0.35);
-  const closedCount = Math.max(0, num - introCount - activeCount);
+  const introCount = Math.ceil(num * 0.65);
+  const closedCount = Math.max(0, num - introCount);
   for (let i = 0; i < introCount; i += 1) stagePlan.push("introduced");
-  for (let i = 0; i < activeCount; i += 1) stagePlan.push("active");
   for (let i = 0; i < closedCount; i += 1) stagePlan.push("closed");
+  faker.helpers.shuffle(stagePlan);
 
   for (const stage of stagePlan) {
     const kind = pickOne(MATCH_KINDS);
@@ -285,6 +296,13 @@ export function createMatches(
     const notes = faker.datatype.boolean({ probability: 0.5 })
       ? faker.lorem.sentence({ min: 6, max: 14 })
       : null;
+    const introduction_at =
+      stage === "introduced"
+        ? faker.date.recent({ days: 40 }).toISOString()
+        : null;
+    const introduction_notes = faker.datatype.boolean({ probability: 0.35 })
+      ? faker.lorem.sentence({ min: 6, max: 12 })
+      : null;
     rows.push({
       id: randomUUID(),
       contact_a_id: a.id,
@@ -294,9 +312,66 @@ export function createMatches(
       outcome,
       context,
       notes,
+      introduction_at,
+      introduction_notes,
     });
   }
   return rows;
+}
+
+/**
+ * Pipeline rows for seeded opportunities (introduced matches) and closed history on closed pairs.
+ */
+export function createMatchTransactions(matches: MatchRow[]): MatchTransactionSeedRow[] {
+  const out: MatchTransactionSeedRow[] = [];
+  for (const m of matches) {
+    if (m.stage === "closed") {
+      out.push({
+        id: randomUUID(),
+        match_id: m.id,
+        title: faker.datatype.boolean({ probability: 0.4 })
+          ? faker.lorem.words({ min: 2, max: 5 })
+          : null,
+        stage: "closed",
+        outcome: m.outcome ?? pickOne(MATCH_OUTCOMES),
+        context: m.context,
+        notes: m.notes,
+      });
+      continue;
+    }
+    const nActive = faker.number.int({ min: 0, max: 2 });
+    for (let i = 0; i < nActive; i += 1) {
+      out.push({
+        id: randomUUID(),
+        match_id: m.id,
+        title:
+          i === 0 && faker.datatype.boolean({ probability: 0.7 })
+            ? faker.lorem.words({ min: 2, max: 4 })
+            : null,
+        stage: "active",
+        outcome: null,
+        context:
+          i === 0
+            ? `${faker.lorem.sentence({ min: 6, max: 12 })}`
+            : faker.lorem.sentence({ min: 6, max: 10 }),
+        notes: faker.datatype.boolean({ probability: 0.3 })
+          ? faker.lorem.sentence({ min: 4, max: 10 })
+          : null,
+      });
+    }
+    if (faker.datatype.boolean({ probability: 0.22 })) {
+      out.push({
+        id: randomUUID(),
+        match_id: m.id,
+        title: null,
+        stage: "closed",
+        outcome: pickOne(MATCH_OUTCOMES),
+        context: faker.lorem.sentence({ min: 6, max: 12 }),
+        notes: null,
+      });
+    }
+  }
+  return out;
 }
 
 /**

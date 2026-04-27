@@ -52,7 +52,7 @@ export const rexEmptySuggestions =
   "No suggestions right now. Either your network is perfect or you haven't fed me enough. Probably the latter.";
 
 export const rexEmptyMatchCanvas =
-  "No matches on the canvas yet. Accept a suggestion or pair two contacts to start one.";
+  "No deals on the pipeline yet. Record an introduction under Opportunities, then add a deal.";
 
 export const rexEmptyOrganisations =
   "No organisations yet. Map the players before the matches get fuzzy.";

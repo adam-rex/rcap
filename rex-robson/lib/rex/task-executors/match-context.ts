@@ -22,7 +22,7 @@ export type ContactContext = {
 export type MatchContext = {
   id: string;
   kind: "founder_investor" | "founder_lender";
-  stage: "introduced" | "active" | "closed";
+  stage: "introduced" | "closed";
   outcome: "won" | "lost" | "passed" | null;
   context: string | null;
   notes: string | null;
@@ -108,8 +108,7 @@ export async function fetchMatchContext(
   const kind =
     kindRaw === "founder_lender" ? "founder_lender" : "founder_investor";
   const stageRaw = row.stage;
-  const stage =
-    stageRaw === "active" || stageRaw === "closed" ? stageRaw : "introduced";
+  const stage = stageRaw === "closed" ? "closed" : "introduced";
   const outcomeRaw = row.outcome;
   const outcome =
     outcomeRaw === "won" || outcomeRaw === "lost" || outcomeRaw === "passed"

@@ -16,6 +16,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { faker } from "@faker-js/faker";
 import {
   createContacts,
+  createMatchTransactions,
   createMatches,
   createOrganisations,
   createStructuredSuggestions,
@@ -39,6 +40,11 @@ async function clearTables(supabase: SupabaseClient): Promise<void> {
   if (emh) throw emh;
   const { error: e0 } = await supabase.from("rex_tasks").delete().neq("id", DUMMY);
   if (e0) throw e0;
+  const { error: etx } = await supabase
+    .from("match_transactions")
+    .delete()
+    .neq("id", DUMMY);
+  if (etx) throw etx;
   const { error: em } = await supabase.from("matches").delete().neq("id", DUMMY);
   if (em) throw em;
   const { error: es } = await supabase
@@ -62,7 +68,12 @@ const CHUNK = 100;
 
 async function insertChunked<T extends Record<string, unknown>>(
   supabase: SupabaseClient,
-  table: "organisations" | "contacts" | "matches" | "suggestions",
+  table:
+    | "organisations"
+    | "contacts"
+    | "matches"
+    | "match_transactions"
+    | "suggestions",
   rows: T[],
 ): Promise<void> {
   for (let i = 0; i < rows.length; i += CHUNK) {
@@ -156,6 +167,7 @@ export async function seedDatabase(
   const contacts =
     orgCount > 0 ? createContacts(organisations, contactCount) : [];
   const matches = createMatches(contacts, matchCount);
+  const matchTransactions = createMatchTransactions(matches);
   const suggestions = createStructuredSuggestions(
     contacts,
     matches,
@@ -170,6 +182,9 @@ export async function seedDatabase(
   }
   if (matches.length > 0) {
     await insertChunked(supabase, "matches", matches);
+  }
+  if (matchTransactions.length > 0) {
+    await insertChunked(supabase, "match_transactions", matchTransactions);
   }
   if (suggestions.length > 0) {
     await insertChunked(supabase, "suggestions", suggestions);

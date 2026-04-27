@@ -5,16 +5,16 @@ import {
   WORKSPACE_MATCHES_PAGE_SIZE_MAX,
   type MatchKind,
   type MatchOutcome,
-  type MatchStage,
-  type WorkspaceMatchPageRow,
+  type PipelineTransactionStage,
   type WorkspaceMatchesPageResult,
+  type WorkspacePipelineTransactionRow,
 } from "./workspace-matches-page.types";
 
 export type {
   MatchKind,
   MatchOutcome,
-  MatchStage,
-  WorkspaceMatchPageRow,
+  PipelineTransactionStage,
+  WorkspacePipelineTransactionRow,
   WorkspaceMatchesPageResult,
 };
 export {
@@ -22,8 +22,8 @@ export {
   WORKSPACE_MATCHES_PAGE_SIZE_MAX,
 } from "./workspace-matches-page.types";
 
-function parseStage(raw: unknown): MatchStage {
-  return raw === "active" || raw === "closed" ? raw : "introduced";
+function parseTxnStage(raw: unknown): PipelineTransactionStage {
+  return raw === "closed" ? "closed" : "active";
 }
 
 function parseOutcome(raw: unknown): MatchOutcome | null {
@@ -34,31 +34,39 @@ function parseKind(raw: unknown): MatchKind {
   return raw === "founder_lender" ? "founder_lender" : "founder_investor";
 }
 
-type RawMatch = {
+type RawTxn = {
   id: string;
-  contact_a_id: string;
-  contact_b_id: string;
-  kind: string | null;
+  match_id: string;
+  title: string | null;
   stage: string | null;
   outcome: string | null;
   context: string | null;
   notes: string | null;
-  contact_a: { id: string; name: string | null } | null;
-  contact_b: { id: string; name: string | null } | null;
+  match: {
+    contact_a_id: string;
+    contact_b_id: string;
+    kind: string | null;
+    contact_a: { name: string | null } | null;
+    contact_b: { name: string | null } | null;
+  } | null;
 };
 
-function shapeRow(raw: RawMatch): WorkspaceMatchPageRow {
+function shapeRow(raw: RawTxn): WorkspacePipelineTransactionRow | null {
+  const m = raw.match;
+  if (!m) return null;
   return {
     id: String(raw.id),
-    contact_a_id: String(raw.contact_a_id),
-    contact_b_id: String(raw.contact_b_id),
-    contact_a_name: raw.contact_a?.name ?? "(unknown)",
-    contact_b_name: raw.contact_b?.name ?? "(unknown)",
-    kind: parseKind(raw.kind),
-    stage: parseStage(raw.stage),
+    match_id: String(raw.match_id),
+    contact_a_id: String(m.contact_a_id),
+    contact_b_id: String(m.contact_b_id),
+    contact_a_name: m.contact_a?.name ?? "(unknown)",
+    contact_b_name: m.contact_b?.name ?? "(unknown)",
+    kind: parseKind(m.kind),
+    stage: parseTxnStage(raw.stage),
     outcome: parseOutcome(raw.outcome),
     context: raw.context == null ? null : String(raw.context),
     notes: raw.notes == null ? null : String(raw.notes),
+    title: raw.title == null ? null : String(raw.title),
   };
 }
 
@@ -75,33 +83,32 @@ export async function fetchWorkspaceMatchesPageWithClient(
   const to = from + pageSize - 1;
 
   const select =
-    "id,contact_a_id,contact_b_id,kind,stage,outcome,context,notes," +
-    "contact_a:contacts!matches_contact_a_id_fkey(id,name)," +
-    "contact_b:contacts!matches_contact_b_id_fkey(id,name)";
+    "id,match_id,title,stage,outcome,context,notes," +
+    "match:matches!inner(contact_a_id,contact_b_id,kind," +
+    "contact_a:contacts!matches_contact_a_id_fkey(name)," +
+    "contact_b:contacts!matches_contact_b_id_fkey(name))";
 
   let query = client
-    .from("matches")
+    .from("match_transactions")
     .select(select, { count: "exact" })
     .order("updated_at", { ascending: false })
     .range(from, to);
 
   const q = (params.search ?? "").trim();
   if (q.length > 0) {
-    // Search across context + notes; client-side filtering on contact names is layered on top
-    // by the UI when needed. (Postgres OR with FK joins via embedded resources is fiddly.)
-    const escaped = q.replace(/[%_]/g, (m) => `\\${m}`);
+    const escaped = q.replace(/[%_]/g, (ch) => `\\${ch}`);
     query = query.or(
-      `context.ilike.%${escaped}%,notes.ilike.%${escaped}%`,
+      `title.ilike.%${escaped}%,context.ilike.%${escaped}%,notes.ilike.%${escaped}%`,
     );
   }
 
   const { data, error, count } = await query;
   if (error) throw error;
 
-  const rows = (data ?? []).map((r) => shapeRow(r as unknown as RawMatch));
+  const rows = (data ?? [])
+    .map((r) => shapeRow(r as unknown as RawTxn))
+    .filter((x): x is WorkspacePipelineTransactionRow => x != null);
 
-  // If a search was provided, also keep rows whose contact names match (client-side filter
-  // since we couldn't OR across embedded resources cleanly).
   let filtered = rows;
   if (q.length > 0) {
     const needle = q.toLowerCase();
@@ -109,6 +116,7 @@ export async function fetchWorkspaceMatchesPageWithClient(
       (row) =>
         row.contact_a_name.toLowerCase().includes(needle) ||
         row.contact_b_name.toLowerCase().includes(needle) ||
+        (row.title ?? "").toLowerCase().includes(needle) ||
         (row.context ?? "").toLowerCase().includes(needle) ||
         (row.notes ?? "").toLowerCase().includes(needle),
     );

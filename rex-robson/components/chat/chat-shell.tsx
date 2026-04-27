@@ -24,6 +24,7 @@ import { ContactsBrowsePanel } from "./contacts-browse-panel";
 import { DashboardPanel } from "./dashboard-panel";
 import { EmailsBrowsePanel } from "./emails-browse-panel";
 import { OrganisationsBrowsePanel } from "./organisations-browse-panel";
+import { OpportunitiesPanel } from "./opportunities-panel";
 import { PipelinePanel } from "./pipeline-panel";
 import { QuickCaptureDialog } from "./quick-capture-dialog";
 import { QuickCaptureFab } from "./quick-capture-fab";
@@ -335,6 +336,8 @@ export function ChatShell({
               rows={effectiveWorkspace.suggestions}
               isEmpty={effectiveStats.suggestionsPendingCount === 0}
             />
+          ) : activeNav === "opportunities" ? (
+            <OpportunitiesPanel />
           ) : null}
         </main>
       </div>

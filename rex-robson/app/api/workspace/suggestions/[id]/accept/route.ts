@@ -4,6 +4,7 @@ import {
   acceptSuggestionAsMatch,
   getWorkspaceWriteClient,
 } from "@/lib/data/workspace-mutations";
+import { supabaseErrorSummary } from "@/lib/data/supabase-error-guards";
 
 export const runtime = "nodejs";
 
@@ -32,11 +33,11 @@ export async function POST(_req: Request, context: RouteContext) {
       { status: 201 },
     );
   } catch (e) {
-    const message =
-      e instanceof Error ? e.message : "accept_suggestion_failed";
+    const message = supabaseErrorSummary(e);
     if (process.env.NODE_ENV === "development") {
       console.error(
         "[rex-robson] POST /api/workspace/suggestions/[id]/accept:",
+        message,
         e,
       );
     }

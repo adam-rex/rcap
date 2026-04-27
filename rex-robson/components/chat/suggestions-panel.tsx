@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, RefreshCw, Sparkles, X } from "lucide-react";
+import { RefreshCw, Sparkles, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
   useCallback,
@@ -191,7 +191,7 @@ export function SuggestionsPanel({ rows, isEmpty }: SuggestionsPanelProps) {
           throw new Error(data.error ?? `${action}_failed_${res.status}`);
         }
         if (action === "accept") {
-          setToast("Match created — see Pipeline › Matches.");
+          setToast("Introduction recorded — see Opportunities.");
         } else {
           setToast("Suggestion dismissed.");
         }
@@ -269,7 +269,7 @@ export function SuggestionsPanel({ rows, isEmpty }: SuggestionsPanelProps) {
           <p className="mt-1 text-xs text-charcoal-light/80">
             {activeTab === "live"
               ? liveEmpty
-                ? "No suggestions pending — generate fresh founder <> investor and founder <> lender matches."
+                ? "No profile matches pending — generate fresh founder <> investor and founder <> lender pairs."
                 : filterActive
                   ? `${filteredRows.length} of ${liveRows.length} row${liveRows.length === 1 ? "" : "s"} match score filter`
                   : `${liveRows.length} row${liveRows.length === 1 ? "" : "s"} from your workspace`
@@ -516,15 +516,10 @@ export function SuggestionsPanel({ rows, isEmpty }: SuggestionsPanelProps) {
                           type="button"
                           onClick={() => runAction(s.id, "accept")}
                           disabled={acting}
-                          aria-label="Accept suggestion and create match"
-                          title="Accept & move to canvas"
-                          className="inline-flex size-8 items-center justify-center rounded-lg border border-charcoal/[0.08] bg-cream-light/60 text-charcoal transition-colors hover:bg-charcoal hover:text-cream disabled:cursor-not-allowed disabled:opacity-60"
+                          aria-label="Made introduction"
+                          className="rounded-lg border border-charcoal/[0.08] bg-cream-light/60 px-2.5 py-1.5 text-[11px] font-medium text-charcoal transition-colors hover:bg-charcoal hover:text-cream disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          <Check
-                            className="size-4"
-                            strokeWidth={2}
-                            aria-hidden
-                          />
+                          Made introduction
                         </button>
                         <button
                           type="button"

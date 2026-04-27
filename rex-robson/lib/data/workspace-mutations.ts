@@ -11,6 +11,7 @@ import type {
   WorkspaceTaskStatus,
   WorkspaceTaskType,
 } from "@/lib/data/workspace-tasks.types";
+import { isLegacyMatchesWithoutIntroColumnsError } from "./supabase-error-guards";
 
 export async function getWorkspaceWriteClient(): Promise<SupabaseClient> {
   return tryCreateServiceRoleClient() ?? (await createServerSupabaseClient());
@@ -258,35 +259,47 @@ export async function updateWorkspaceContact(
 }
 
 // ---------------------------------------------------------------------------
-// Matches
+// Matches (opportunities — one open row per pair; stage introduced | closed)
 // ---------------------------------------------------------------------------
 
 export type MatchKind = "founder_investor" | "founder_lender";
-export type MatchStage = "introduced" | "active" | "closed";
+/** Lifecycle on the opportunity (pair), not individual deals. */
+export type OpportunityStage = "introduced" | "closed";
 export type MatchOutcome = "won" | "lost" | "passed";
+/** Stage on a pipeline transaction row. */
+export type PipelineTransactionStage = "active" | "closed";
+
+/** Legacy / history rows may still reference `active` on matches. */
+export type MatchHistoryStage = OpportunityStage | "active";
 
 export type CreatedMatchRow = {
   id: string;
   contact_a_id: string;
   contact_b_id: string;
   kind: MatchKind;
-  stage: MatchStage;
+  stage: OpportunityStage;
   outcome: MatchOutcome | null;
   context: string | null;
   notes: string | null;
   suggestion_id: string | null;
+  introduction_at: string | null;
+  introduction_notes: string | null;
 };
 
 export type MatchStageHistoryRow = {
   id: number;
   match_id: string;
-  from_stage: MatchStage | null;
-  to_stage: MatchStage;
+  from_stage: MatchHistoryStage | null;
+  to_stage: MatchHistoryStage;
   changed_by: string | null;
   changed_at: string;
 };
 
-function parseStage(raw: unknown): MatchStage {
+function parseOpportunityStage(raw: unknown): OpportunityStage {
+  return raw === "closed" ? "closed" : "introduced";
+}
+
+function parseHistoryStage(raw: unknown): MatchHistoryStage {
   return raw === "active" || raw === "closed" ? raw : "introduced";
 }
 
@@ -304,16 +317,25 @@ function shapeMatchRow(data: Record<string, unknown>): CreatedMatchRow {
     contact_a_id: String(data.contact_a_id),
     contact_b_id: String(data.contact_b_id),
     kind: parseKind(data.kind),
-    stage: parseStage(data.stage),
+    stage: parseOpportunityStage(data.stage),
     outcome: parseOutcome(data.outcome),
     context: data.context == null ? null : String(data.context),
     notes: data.notes == null ? null : String(data.notes),
     suggestion_id:
       data.suggestion_id == null ? null : String(data.suggestion_id),
+    introduction_at:
+      data.introduction_at == null ? null : String(data.introduction_at),
+    introduction_notes:
+      data.introduction_notes == null
+        ? null
+        : String(data.introduction_notes),
   };
 }
 
 const MATCH_SELECT =
+  "id,contact_a_id,contact_b_id,kind,stage,outcome,context,notes,suggestion_id,introduction_at,introduction_notes";
+
+const MATCH_SELECT_LEGACY =
   "id,contact_a_id,contact_b_id,kind,stage,outcome,context,notes,suggestion_id";
 
 export async function insertWorkspaceMatch(
@@ -322,34 +344,64 @@ export async function insertWorkspaceMatch(
     contact_a_id: string;
     contact_b_id: string;
     kind: MatchKind;
-    stage?: MatchStage;
+    stage?: OpportunityStage;
     outcome?: MatchOutcome | null;
     context: string | null;
     notes: string | null;
     suggestion_id?: string | null;
+    introduction_at?: string | null;
+    introduction_notes?: string | null;
   },
 ): Promise<CreatedMatchRow> {
   const stage = input.stage ?? "introduced";
   const outcome = stage === "closed" ? input.outcome ?? null : null;
-  const { data, error } = await client
-    .from("matches")
-    .insert({
-      contact_a_id: input.contact_a_id,
-      contact_b_id: input.contact_b_id,
-      kind: input.kind,
-      stage,
-      outcome,
-      context: input.context,
-      notes: input.notes,
-      suggestion_id: input.suggestion_id ?? null,
-    })
-    .select(MATCH_SELECT)
-    .single();
 
-  if (error) throw error;
-  if (!data) throw new Error("Insert returned no row");
+  const insertWithIntro = {
+    contact_a_id: input.contact_a_id,
+    contact_b_id: input.contact_b_id,
+    kind: input.kind,
+    stage,
+    outcome,
+    context: input.context,
+    notes: input.notes,
+    suggestion_id: input.suggestion_id ?? null,
+    introduction_at: input.introduction_at ?? null,
+    introduction_notes: input.introduction_notes ?? null,
+  };
 
-  return shapeMatchRow(data as Record<string, unknown>);
+  const insertLegacy = {
+    contact_a_id: input.contact_a_id,
+    contact_b_id: input.contact_b_id,
+    kind: input.kind,
+    stage,
+    outcome,
+    context: input.context,
+    notes: input.notes,
+    suggestion_id: input.suggestion_id ?? null,
+  };
+
+  async function doInsert(
+    payload: typeof insertWithIntro | typeof insertLegacy,
+    select: string,
+  ): Promise<CreatedMatchRow> {
+    const { data, error } = await client
+      .from("matches")
+      .insert(payload)
+      .select(select)
+      .single();
+    if (error) throw error;
+    if (!data) throw new Error("Insert returned no row");
+    return shapeMatchRow(data as unknown as Record<string, unknown>);
+  }
+
+  try {
+    return await doInsert(insertWithIntro, MATCH_SELECT);
+  } catch (e) {
+    if (isLegacyMatchesWithoutIntroColumnsError(e)) {
+      return await doInsert(insertLegacy, MATCH_SELECT_LEGACY);
+    }
+    throw e;
+  }
 }
 
 export type WorkspaceMatchDetail = CreatedMatchRow;
@@ -358,14 +410,24 @@ export async function fetchWorkspaceMatchById(
   client: SupabaseClient,
   id: string,
 ): Promise<WorkspaceMatchDetail | null> {
-  const { data, error } = await client
+  const first = await client
     .from("matches")
     .select(MATCH_SELECT)
     .eq("id", id)
     .maybeSingle();
-  if (error) throw error;
-  if (!data) return null;
-  return shapeMatchRow(data as Record<string, unknown>);
+  if (first.error && isLegacyMatchesWithoutIntroColumnsError(first.error)) {
+    const legacy = await client
+      .from("matches")
+      .select(MATCH_SELECT_LEGACY)
+      .eq("id", id)
+      .maybeSingle();
+    if (legacy.error) throw legacy.error;
+    if (!legacy.data) return null;
+    return shapeMatchRow(legacy.data as Record<string, unknown>);
+  }
+  if (first.error) throw first.error;
+  if (!first.data) return null;
+  return shapeMatchRow(first.data as Record<string, unknown>);
 }
 
 export async function updateWorkspaceMatch(
@@ -373,7 +435,7 @@ export async function updateWorkspaceMatch(
   id: string,
   input: {
     kind: MatchKind;
-    stage: MatchStage;
+    stage: OpportunityStage;
     outcome: MatchOutcome | null;
     context: string | null;
     notes: string | null;
@@ -402,8 +464,8 @@ export async function insertMatchStageHistory(
   client: SupabaseClient,
   input: {
     match_id: string;
-    from_stage: MatchStage | null;
-    to_stage: MatchStage;
+    from_stage: MatchHistoryStage | null;
+    to_stage: MatchHistoryStage;
     changed_by?: string | null;
   },
 ): Promise<void> {
@@ -420,7 +482,7 @@ export async function moveWorkspaceMatchStage(
   client: SupabaseClient,
   input: {
     id: string;
-    toStage: MatchStage;
+    toStage: OpportunityStage;
     outcome?: MatchOutcome | null;
     changedBy?: string | null;
   },
@@ -469,8 +531,9 @@ export async function listMatchStageHistory(
   return (data ?? []).map((row) => ({
     id: Number(row.id),
     match_id: String(row.match_id),
-    from_stage: row.from_stage == null ? null : parseStage(row.from_stage),
-    to_stage: parseStage(row.to_stage),
+    from_stage:
+      row.from_stage == null ? null : parseHistoryStage(row.from_stage),
+    to_stage: parseHistoryStage(row.to_stage),
     changed_by: row.changed_by == null ? null : String(row.changed_by),
     changed_at: String(row.changed_at ?? ""),
   }));
@@ -624,9 +687,8 @@ export async function updateWorkspaceSuggestionStatus(
 }
 
 /**
- * Accept a suggestion: mark it `acted` and create a corresponding match at the
- * `introduced` stage. Returns the new match row plus the suggestion that was
- * acted on. Bails if the suggestion is missing pair fields.
+ * Mark profile suggestion as done: create an opportunity (match) at `introduced`
+ * and record introduction time. Pipeline deals are separate `match_transactions` rows.
  */
 export async function acceptSuggestionAsMatch(
   client: SupabaseClient,
@@ -648,6 +710,7 @@ export async function acceptSuggestionAsMatch(
     return { ok: false, reason: "missing_pair" };
   }
 
+  const introIso = new Date().toISOString();
   const match = await insertWorkspaceMatch(client, {
     contact_a_id: suggestion.contact_a_id,
     contact_b_id: suggestion.contact_b_id,
@@ -656,6 +719,8 @@ export async function acceptSuggestionAsMatch(
     context: suggestion.body,
     notes: null,
     suggestion_id: suggestion.id,
+    introduction_at: introIso,
+    introduction_notes: null,
   });
   await insertMatchStageHistory(client, {
     match_id: match.id,
@@ -665,6 +730,191 @@ export async function acceptSuggestionAsMatch(
   await updateWorkspaceSuggestionStatus(client, id, "acted");
 
   return { ok: true, match, suggestion };
+}
+
+export async function updateWorkspaceMatchIntroduction(
+  client: SupabaseClient,
+  matchId: string,
+  input: { introduction_at: string | null; introduction_notes: string | null },
+): Promise<CreatedMatchRow | null> {
+  const { data, error } = await client
+    .from("matches")
+    .update({
+      introduction_at: input.introduction_at,
+      introduction_notes: input.introduction_notes,
+    })
+    .eq("id", matchId)
+    .select(MATCH_SELECT)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return shapeMatchRow(data as Record<string, unknown>);
+}
+
+export async function countMatchTransactions(
+  client: SupabaseClient,
+  matchId: string,
+): Promise<number> {
+  const { count, error } = await client
+    .from("match_transactions")
+    .select("*", { count: "exact", head: true })
+    .eq("match_id", matchId);
+  if (error) throw error;
+  return count ?? 0;
+}
+
+/**
+ * Revert an introduction: delete the opportunity row and put the suggestion back
+ * to pending. Fails if any pipeline transactions exist for the pair.
+ */
+export async function undoMatchIntroduction(
+  client: SupabaseClient,
+  matchId: string,
+): Promise<
+  | { ok: true }
+  | {
+      ok: false;
+      reason: "not_found" | "has_transactions" | "not_introduced";
+    }
+> {
+  const match = await fetchWorkspaceMatchById(client, matchId);
+  if (!match) return { ok: false, reason: "not_found" };
+  if (match.stage !== "introduced") {
+    return { ok: false, reason: "not_introduced" };
+  }
+  const n = await countMatchTransactions(client, matchId);
+  if (n > 0) return { ok: false, reason: "has_transactions" };
+
+  const { error: delErr } = await client.from("matches").delete().eq("id", matchId);
+  if (delErr) throw delErr;
+  if (match.suggestion_id) {
+    await updateWorkspaceSuggestionStatus(client, match.suggestion_id, "pending");
+  }
+  return { ok: true };
+}
+
+export type CreatedMatchTransactionRow = {
+  id: string;
+  match_id: string;
+  title: string | null;
+  stage: PipelineTransactionStage;
+  outcome: MatchOutcome | null;
+  context: string | null;
+  notes: string | null;
+};
+
+const TX_SELECT =
+  "id,match_id,title,stage,outcome,context,notes";
+
+function parsePipelineTxnStage(raw: unknown): PipelineTransactionStage {
+  return raw === "closed" ? "closed" : "active";
+}
+
+function shapeMatchTransactionRow(
+  data: Record<string, unknown>,
+): CreatedMatchTransactionRow {
+  return {
+    id: String(data.id),
+    match_id: String(data.match_id),
+    title: data.title == null ? null : String(data.title),
+    stage: parsePipelineTxnStage(data.stage),
+    outcome: parseOutcome(data.outcome),
+    context: data.context == null ? null : String(data.context),
+    notes: data.notes == null ? null : String(data.notes),
+  };
+}
+
+export async function insertWorkspaceMatchTransaction(
+  client: SupabaseClient,
+  input: {
+    match_id: string;
+    title?: string | null;
+    context?: string | null;
+    notes?: string | null;
+    stage?: PipelineTransactionStage;
+  },
+): Promise<CreatedMatchTransactionRow> {
+  const stage = input.stage ?? "active";
+  const { data, error } = await client
+    .from("match_transactions")
+    .insert({
+      match_id: input.match_id,
+      title: input.title ?? null,
+      stage,
+      outcome: null,
+      context: input.context ?? null,
+      notes: input.notes ?? null,
+    })
+    .select(TX_SELECT)
+    .single();
+  if (error) throw error;
+  if (!data) throw new Error("Insert returned no row");
+  return shapeMatchTransactionRow(data as Record<string, unknown>);
+}
+
+export async function fetchWorkspaceMatchTransactionById(
+  client: SupabaseClient,
+  id: string,
+): Promise<CreatedMatchTransactionRow | null> {
+  const { data, error } = await client
+    .from("match_transactions")
+    .select(TX_SELECT)
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return shapeMatchTransactionRow(data as Record<string, unknown>);
+}
+
+export async function updateWorkspaceMatchTransaction(
+  client: SupabaseClient,
+  id: string,
+  input: {
+    title: string | null;
+    stage: PipelineTransactionStage;
+    outcome: MatchOutcome | null;
+    context: string | null;
+    notes: string | null;
+  },
+): Promise<CreatedMatchTransactionRow | null> {
+  const outcome = input.stage === "closed" ? input.outcome : null;
+  const { data, error } = await client
+    .from("match_transactions")
+    .update({
+      title: input.title,
+      stage: input.stage,
+      outcome,
+      context: input.context,
+      notes: input.notes,
+    })
+    .eq("id", id)
+    .select(TX_SELECT)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return shapeMatchTransactionRow(data as Record<string, unknown>);
+}
+
+export async function moveWorkspaceMatchTransactionStage(
+  client: SupabaseClient,
+  input: {
+    id: string;
+    toStage: PipelineTransactionStage;
+    outcome?: MatchOutcome | null;
+  },
+): Promise<CreatedMatchTransactionRow | null> {
+  const current = await fetchWorkspaceMatchTransactionById(client, input.id);
+  if (!current) return null;
+  const targetOutcome =
+    input.toStage === "closed" ? input.outcome ?? current.outcome : null;
+  if (input.toStage === "closed" && !targetOutcome) return null;
+  return updateWorkspaceMatchTransaction(client, input.id, {
+    title: current.title,
+    stage: input.toStage,
+    outcome: targetOutcome,
+    context: current.context,
+    notes: current.notes,
+  });
 }
 
 export type InsertWorkspaceTaskInput = {

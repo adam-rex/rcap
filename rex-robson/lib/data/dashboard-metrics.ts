@@ -4,10 +4,13 @@ import {
   ZERO_DASHBOARD_METRICS,
   ZERO_MATCHES_BY_STAGE,
   type DashboardMetrics,
-  type MatchStage,
   type MatchesByStage,
   type SectorBreakdownEntry,
 } from "./dashboard-metrics.types";
+import {
+  isMissingMatchTransactionsError,
+  supabaseErrorSummary,
+} from "./supabase-error-guards";
 
 export { ZERO_DASHBOARD_METRICS, type DashboardMetrics };
 
@@ -34,16 +37,20 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
       .select("*", { count: "exact", head: true })
       .gte("created_at", thirtyDaysAgoIso);
 
-    // Matches drive stage counts + the total pipeline tile. We pull min/max
-    // deal size from both sides so we can derive an implied per-match deal
-    // value. Sector breakdown is no longer derived from matches — see the
-    // separate contacts-sector query below.
-    const matchRowsReq = client
+    const opportunitiesIntroducedReq = client
       .from("matches")
+      .select("*", { count: "exact", head: true })
+      .eq("stage", "introduced");
+
+    // Active pipeline £ total is scoped to open deal rows (transactions), not the whole pair.
+    const transactionRowsReq = client
+      .from("match_transactions")
       .select(
         "stage," +
-          "contact_a:contacts!matches_contact_a_id_fkey(min_deal_size,max_deal_size)," +
-          "contact_b:contacts!matches_contact_b_id_fkey(min_deal_size,max_deal_size)",
+          "match:matches!inner(" +
+            "contact_a:contacts!matches_contact_a_id_fkey(min_deal_size,max_deal_size)," +
+            "contact_b:contacts!matches_contact_b_id_fkey(min_deal_size,max_deal_size)" +
+          ")",
       );
 
     // Sector breakdown aggregates across the entire contact pool. This is
@@ -59,51 +66,75 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
     const [
       { count: contactCount, error: e1 },
       { count: contactsNew30d, error: e2 },
-      { data: matchRows, error: e3 },
+      { count: opportunitiesIntroducedCount, error: e3a },
+      { data: transactionRows, error: e3 },
       { data: contactSectorRows, error: e4 },
       { count: suggestionsPendingCount, error: e5 },
     ] = await Promise.all([
       contactsTotalReq,
       contactsNew30dReq,
-      matchRowsReq,
+      opportunitiesIntroducedReq,
+      transactionRowsReq,
       contactSectorsReq,
       suggestionsPendingReq,
     ]);
 
     if (e1) throw e1;
     if (e2) throw e2;
-    if (e3) throw e3;
+    if (e3a) throw e3a;
     if (e4) throw e4;
     if (e5) throw e5;
 
+    let txRows = transactionRows ?? [];
+    if (e3) {
+      if (isMissingMatchTransactionsError(e3)) {
+        if (process.env.NODE_ENV === "development") {
+          console.warn(
+            "[rex-robson] getDashboardMetrics: match_transactions missing or not exposed — pipeline tiles use 0. Run Supabase migrations (e.g. 20260427150000_match_transactions.sql).",
+            supabaseErrorSummary(e3),
+          );
+        }
+        txRows = [];
+      } else {
+        throw e3;
+      }
+    }
+
     const matchesByStage: MatchesByStage = { ...ZERO_MATCHES_BY_STAGE };
+    matchesByStage.introduced = opportunitiesIntroducedCount ?? 0;
+
     let activeMatchesCount = 0;
     let totalPipelineGbp = 0;
 
-    for (const raw of matchRows ?? []) {
+    for (const raw of txRows) {
       const row = raw as unknown as {
         stage: string | null;
-        contact_a:
-          | {
-              min_deal_size: number | null;
-              max_deal_size: number | null;
-            }
-          | null;
-        contact_b:
-          | {
-              min_deal_size: number | null;
-              max_deal_size: number | null;
-            }
-          | null;
+        match: {
+          contact_a:
+            | {
+                min_deal_size: number | null;
+                max_deal_size: number | null;
+              }
+            | null;
+          contact_b:
+            | {
+                min_deal_size: number | null;
+                max_deal_size: number | null;
+              }
+            | null;
+        } | null;
       };
       const stage = row.stage;
-      if (stage === "introduced" || stage === "active" || stage === "closed") {
-        matchesByStage[stage as MatchStage] += 1;
-        if (stage === "active") activeMatchesCount += 1;
-      }
-
-      if (stage !== "closed") {
-        totalPipelineGbp += impliedMatchValueGbp(row.contact_a, row.contact_b);
+      const m = row.match;
+      if (stage === "active") {
+        matchesByStage.active += 1;
+        activeMatchesCount += 1;
+        totalPipelineGbp += impliedMatchValueGbp(
+          m?.contact_a ?? null,
+          m?.contact_b ?? null,
+        );
+      } else if (stage === "closed") {
+        matchesByStage.closed += 1;
       }
     }
 
@@ -145,7 +176,11 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
     };
   } catch (err) {
     if (process.env.NODE_ENV === "development") {
-      console.error("[rex-robson] getDashboardMetrics failed:", err);
+      console.error(
+        "[rex-robson] getDashboardMetrics failed:",
+        supabaseErrorSummary(err),
+        err,
+      );
     }
     return ZERO_DASHBOARD_METRICS;
   }

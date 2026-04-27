@@ -1,5 +1,6 @@
 import {
   Building2,
+  Handshake,
   LayoutDashboard,
   LayoutGrid,
   Mail,
@@ -23,6 +24,12 @@ export const CHAT_NAV_ITEMS = [
   },
   { id: "pipeline", label: "Pipeline", icon: LayoutGrid, hidden: false },
   { id: "suggestions", label: "Suggestions", icon: Sparkles, hidden: false },
+  {
+    id: "opportunities",
+    label: "Opportunities",
+    icon: Handshake,
+    hidden: false,
+  },
 ] as const;
 
 export type ChatNavId = (typeof CHAT_NAV_ITEMS)[number]["id"];

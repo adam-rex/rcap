@@ -3,10 +3,10 @@ import { parseMatchUpsertBody } from "@/lib/api/workspace-entity-bodies";
 import { readJsonObject } from "@/lib/api/workspace-post-parse";
 import { sanitizeWorkspaceListSearch } from "@/lib/data/workspace-search-sanitize";
 import {
-  getWorkspaceMatchesPage,
   WORKSPACE_MATCHES_PAGE_SIZE_DEFAULT,
   WORKSPACE_MATCHES_PAGE_SIZE_MAX,
 } from "@/lib/data/workspace-matches-page";
+import { getWorkspaceMatchPairsPage } from "@/lib/data/workspace-opportunities-page";
 import {
   getWorkspaceWriteClient,
   insertMatchStageHistory,
@@ -33,6 +33,11 @@ export async function POST(req: Request) {
       outcome: fields.value.outcome,
       context: fields.value.context,
       notes: fields.value.notes,
+      introduction_at:
+        fields.value.stage === "introduced"
+          ? new Date().toISOString()
+          : null,
+      introduction_notes: null,
     });
     await insertMatchStageHistory(client, {
       match_id: row.id,
@@ -94,7 +99,7 @@ export async function GET(req: Request) {
   const search = sanitizeWorkspaceListSearch(qRaw);
 
   try {
-    const result = await getWorkspaceMatchesPage({ search, page, pageSize });
+    const result = await getWorkspaceMatchPairsPage({ search, page, pageSize });
     return NextResponse.json(result);
   } catch (e) {
     const message = e instanceof Error ? e.message : "Query failed";

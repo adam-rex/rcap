@@ -28,7 +28,7 @@ export type Contact = {
 
 export type MatchKind = "founder_investor" | "founder_lender";
 
-export type MatchStage = "introduced" | "active" | "closed";
+export type MatchStage = "introduced" | "closed";
 
 export type MatchOutcome = "won" | "lost" | "passed";
 
@@ -42,6 +42,20 @@ export type Match = {
   context: string | null;
   notes: string | null;
   suggestion_id: string | null;
+  introduction_at: string | null;
+  introduction_notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type MatchTransaction = {
+  id: string;
+  match_id: string;
+  title: string | null;
+  stage: "active" | "closed";
+  outcome: MatchOutcome | null;
+  context: string | null;
+  notes: string | null;
   created_at: string;
   updated_at: string;
 };

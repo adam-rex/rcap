@@ -34,6 +34,8 @@ export async function GET(_req: Request, context: RouteContext) {
       context: row.context,
       notes: row.notes,
       suggestionId: row.suggestion_id,
+      introductionAt: row.introduction_at,
+      introductionNotes: row.introduction_notes,
       stageHistory,
     });
   } catch (e) {

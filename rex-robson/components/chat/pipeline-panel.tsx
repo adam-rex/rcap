@@ -7,7 +7,7 @@ import { RexTasksPanel } from "./rex-tasks-panel";
 type PipelineSubView = "matches" | "tasks";
 
 const SUB_VIEWS: { id: PipelineSubView; label: string }[] = [
-  { id: "matches", label: "Matches" },
+  { id: "matches", label: "Deals" },
   { id: "tasks", label: "Tasks" },
 ];
 

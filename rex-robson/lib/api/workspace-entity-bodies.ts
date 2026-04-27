@@ -108,14 +108,16 @@ export function parseContactUpsertBody(
 }
 
 export type MatchKind = "founder_investor" | "founder_lender";
-export type MatchStage = "introduced" | "active" | "closed";
+/** Opportunity (pair) stage — not pipeline. */
+export type OpportunityStage = "introduced" | "closed";
 export type MatchOutcome = "won" | "lost" | "passed";
+export type PipelineTransactionStage = "active" | "closed";
 
 export type MatchUpsertBody = {
   contactAId: string;
   contactBId: string;
   kind: MatchKind;
-  stage: MatchStage;
+  stage: OpportunityStage;
   outcome: MatchOutcome | null;
   context: string | null;
   notes: string | null;
@@ -140,10 +142,8 @@ function parseKind(raw: string | null): MatchKind | null {
   return raw === "founder_investor" || raw === "founder_lender" ? raw : null;
 }
 
-function parseStage(raw: string | null): MatchStage | null {
-  return raw === "introduced" || raw === "active" || raw === "closed"
-    ? raw
-    : null;
+function parseOpportunityStage(raw: string | null): OpportunityStage | null {
+  return raw === "introduced" || raw === "closed" ? raw : null;
 }
 
 function parseOutcome(raw: string | null): MatchOutcome | null {
@@ -176,7 +176,14 @@ export function parseMatchUpsertBody(
   }
   const stageRaw = parseOptionalString(body, "stage", 40);
   if (!stageRaw.ok) return stageRaw;
-  const stage = parseStage(stageRaw.value) ?? "introduced";
+  const stageParsed = parseOpportunityStage(stageRaw.value);
+  if (stageRaw.value != null && stageRaw.value.trim() !== "" && !stageParsed) {
+    return {
+      ok: false,
+      error: "stage must be one of: introduced, closed.",
+    };
+  }
+  const stage = stageParsed ?? "introduced";
   const outcomeRaw = parseOptionalString(body, "outcome", 40);
   if (!outcomeRaw.ok) return outcomeRaw;
   const outcome = stage === "closed" ? parseOutcome(outcomeRaw.value) : null;
@@ -199,21 +206,23 @@ export function parseMatchUpsertBody(
   };
 }
 
-export type MatchStageBody = {
-  stage: MatchStage;
+export type OpportunityStageBody = {
+  stage: OpportunityStage;
   outcome: MatchOutcome | null;
 };
 
-export function parseMatchStageBody(
+export function parseOpportunityStageBody(
   body: Record<string, unknown>,
-): { ok: true; value: MatchStageBody } | { ok: false; error: string } {
+):
+  | { ok: true; value: OpportunityStageBody }
+  | { ok: false; error: string } {
   const stageRaw = parseRequiredString(body, "stage", 40);
   if (!stageRaw.ok) return stageRaw;
-  const stage = parseStage(stageRaw.value);
+  const stage = parseOpportunityStage(stageRaw.value);
   if (!stage) {
     return {
       ok: false,
-      error: "stage must be one of: introduced, active, closed.",
+      error: "stage must be one of: introduced, closed.",
     };
   }
   const outcomeRaw = parseOptionalString(body, "outcome", 40);
@@ -221,3 +230,109 @@ export function parseMatchStageBody(
   const outcome = stage === "closed" ? parseOutcome(outcomeRaw.value) : null;
   return { ok: true, value: { stage, outcome } };
 }
+
+export type MatchTransactionStageBody = {
+  stage: PipelineTransactionStage;
+  outcome: MatchOutcome | null;
+};
+
+export function parseMatchTransactionStageBody(
+  body: Record<string, unknown>,
+):
+  | { ok: true; value: MatchTransactionStageBody }
+  | { ok: false; error: string } {
+  const stageRaw = parseRequiredString(body, "stage", 40);
+  if (!stageRaw.ok) return stageRaw;
+  const st = stageRaw.value.trim();
+  const stage: PipelineTransactionStage | null =
+    st === "active" || st === "closed" ? st : null;
+  if (!stage) {
+    return {
+      ok: false,
+      error: "stage must be one of: active, closed.",
+    };
+  }
+  const outcomeRaw = parseOptionalString(body, "outcome", 40);
+  if (!outcomeRaw.ok) return outcomeRaw;
+  const outcome = stage === "closed" ? parseOutcome(outcomeRaw.value) : null;
+  return { ok: true, value: { stage, outcome } };
+}
+
+export type CreateMatchTransactionBody = {
+  matchId: string;
+  title: string | null;
+  context: string | null;
+  notes: string | null;
+};
+
+export function parseCreateMatchTransactionBody(
+  body: Record<string, unknown>,
+):
+  | { ok: true; value: CreateMatchTransactionBody }
+  | { ok: false; error: string } {
+  const matchId = parseRequiredUuid(body, "matchId");
+  if (!matchId.ok) return matchId;
+  const title = parseOptionalString(body, "title", 300);
+  if (!title.ok) return title;
+  const context = parseOptionalString(body, "context", 8000);
+  if (!context.ok) return context;
+  const notes = parseOptionalString(body, "notes", 8000);
+  if (!notes.ok) return notes;
+  return {
+    ok: true,
+    value: {
+      matchId: matchId.value,
+      title: title.value,
+      context: context.value,
+      notes: notes.value,
+    },
+  };
+}
+
+export type MatchTransactionUpsertBody = {
+  title: string | null;
+  stage: PipelineTransactionStage;
+  outcome: MatchOutcome | null;
+  context: string | null;
+  notes: string | null;
+};
+
+export function parseMatchTransactionUpsertBody(
+  body: Record<string, unknown>,
+):
+  | { ok: true; value: MatchTransactionUpsertBody }
+  | { ok: false; error: string } {
+  const title = parseOptionalString(body, "title", 300);
+  if (!title.ok) return title;
+  const stageRaw = parseRequiredString(body, "stage", 40);
+  if (!stageRaw.ok) return stageRaw;
+  const st = stageRaw.value.trim();
+  const stage: PipelineTransactionStage | null =
+    st === "active" || st === "closed" ? st : null;
+  if (!stage) {
+    return {
+      ok: false,
+      error: "stage must be one of: active, closed.",
+    };
+  }
+  const outcomeRaw = parseOptionalString(body, "outcome", 40);
+  if (!outcomeRaw.ok) return outcomeRaw;
+  const outcome = stage === "closed" ? parseOutcome(outcomeRaw.value) : null;
+  const context = parseOptionalString(body, "context", 8000);
+  if (!context.ok) return context;
+  const notes = parseOptionalString(body, "notes", 8000);
+  if (!notes.ok) return notes;
+  return {
+    ok: true,
+    value: {
+      title: title.value,
+      stage,
+      outcome,
+      context: context.value,
+      notes: notes.value,
+    },
+  };
+}
+
+/** @deprecated Use parseOpportunityStageBody */
+export const parseMatchStageBody = parseOpportunityStageBody;

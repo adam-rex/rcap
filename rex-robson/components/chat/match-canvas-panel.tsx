@@ -6,10 +6,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   type MatchKind,
   type MatchOutcome,
-  type MatchStage,
-  type WorkspaceMatchPageRow,
+  type PipelineTransactionStage,
+  type WorkspacePipelineTransactionRow,
 } from "@/lib/data/workspace-matches-page.types";
-import type { WorkspaceContactPageRow } from "@/lib/data/workspace-contacts.types";
 import {
   WORKSPACE_FORM_BTN_PRIMARY,
   WORKSPACE_FORM_BTN_SECONDARY,
@@ -19,28 +18,18 @@ import {
 } from "./workspace-create-dialog";
 import { MatchRexTasks } from "./match-rex-tasks";
 
-type ApiOk = { rows: WorkspaceMatchPageRow[]; total: number };
+type ApiOk = { rows: WorkspacePipelineTransactionRow[]; total: number };
 type ApiErr = { error?: string; hint?: string };
 
-type StageHistoryRow = {
-  id: number;
-  match_id: string;
-  from_stage: MatchStage | null;
-  to_stage: MatchStage;
-  changed_by: string | null;
-  changed_at: string;
-};
-
-const STAGES: { id: MatchStage; label: string; description: string }[] = [
-  {
-    id: "introduced",
-    label: "Introduced",
-    description: "Intro sent, awaiting first reply",
-  },
+const STAGES: {
+  id: PipelineTransactionStage;
+  label: string;
+  description: string;
+}[] = [
   {
     id: "active",
     label: "Active",
-    description: "Conversation live between both sides",
+    description: "Specific deal in motion for this introduction",
   },
   {
     id: "closed",
@@ -60,8 +49,8 @@ const OUTCOMES: { id: MatchOutcome; label: string }[] = [
   { id: "passed", label: "Passed" },
 ];
 
-function stageLabel(stage: MatchStage | null | undefined) {
-  return STAGES.find((s) => s.id === stage)?.label ?? "Introduced";
+function stageLabel(stage: PipelineTransactionStage | null | undefined) {
+  return STAGES.find((s) => s.id === stage)?.label ?? "Active";
 }
 
 function kindLabel(kind: MatchKind) {
@@ -84,28 +73,30 @@ const KIND_BADGE: Record<MatchKind, string> = {
   founder_lender: "border-charcoal/20 bg-charcoal/10 text-charcoal",
 };
 
-type ContactOption = Pick<
-  WorkspaceContactPageRow,
-  "id" | "name" | "contact_type"
->;
+type OpportunityPick = {
+  id: string;
+  contact_a_name: string;
+  contact_b_name: string;
+};
 
-// Match canvas is a kanban view — fetch every match in one shot so each stage
-// column scrolls instead of paginating across 8-row pages.
 const MATCH_CANVAS_PAGE_SIZE = 500;
 
 export function MatchCanvasPanel() {
   const pageSize = MATCH_CANVAS_PAGE_SIZE;
   const [queryInput, setQueryInput] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
-  const [rows, setRows] = useState<WorkspaceMatchPageRow[]>([]);
+  const [rows, setRows] = useState<WorkspacePipelineTransactionRow[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloadTick, setReloadTick] = useState(0);
   const [stageMoveBusyId, setStageMoveBusyId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
-  const [dropStage, setDropStage] = useState<MatchStage | null>(null);
-  const [dropPulseStage, setDropPulseStage] = useState<MatchStage | null>(null);
+  const [dropStage, setDropStage] = useState<PipelineTransactionStage | null>(
+    null,
+  );
+  const [dropPulseStage, setDropPulseStage] =
+    useState<PipelineTransactionStage | null>(null);
 
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
@@ -113,17 +104,20 @@ export function MatchCanvasPanel() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [formBusy, setFormBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [contactOptions, setContactOptions] = useState<ContactOption[]>([]);
-  const [contactsLoading, setContactsLoading] = useState(false);
+  const [opportunityOptions, setOpportunityOptions] = useState<
+    OpportunityPick[]
+  >([]);
+  const [opportunitiesLoading, setOpportunitiesLoading] = useState(false);
 
-  const [fContactA, setFContactA] = useState("");
-  const [fContactB, setFContactB] = useState("");
+  const [fMatchId, setFMatchId] = useState("");
+  const [fTitle, setFTitle] = useState("");
   const [fKind, setFKind] = useState<MatchKind>("founder_investor");
-  const [fStage, setFStage] = useState<MatchStage>("introduced");
+  const [fStage, setFStage] = useState<PipelineTransactionStage>("active");
   const [fOutcome, setFOutcome] = useState<MatchOutcome | "">("");
   const [fContext, setFContext] = useState("");
   const [fNotes, setFNotes] = useState("");
-  const [stageHistory, setStageHistory] = useState<StageHistoryRow[]>([]);
+  /** Display-only in edit mode */
+  const [fPairHeadline, setFPairHeadline] = useState("");
 
   useEffect(() => {
     const t = window.setTimeout(() => setDebouncedQuery(queryInput.trim()), 320);
@@ -139,7 +133,9 @@ export function MatchCanvasPanel() {
     });
     if (debouncedQuery !== "") params.set("q", debouncedQuery);
     try {
-      const res = await fetch(`/api/workspace/matches?${params.toString()}`);
+      const res = await fetch(
+        `/api/workspace/match-transactions?${params.toString()}`,
+      );
       const data = (await res.json()) as ApiOk & ApiErr;
       if (!res.ok) {
         setRows([]);
@@ -147,7 +143,7 @@ export function MatchCanvasPanel() {
         const parts = [data.error, data.hint].filter(
           (x): x is string => typeof x === "string" && x.length > 0,
         );
-        setError(parts.length > 0 ? parts.join(" ") : "Could not load matches.");
+        setError(parts.length > 0 ? parts.join(" ") : "Could not load deals.");
         return;
       }
       setRows(data.rows ?? []);
@@ -155,7 +151,7 @@ export function MatchCanvasPanel() {
     } catch {
       setRows([]);
       setTotal(0);
-      setError("Network error while loading matches.");
+      setError("Network error while loading deals.");
     } finally {
       setLoading(false);
     }
@@ -165,101 +161,83 @@ export function MatchCanvasPanel() {
     void load();
   }, [load, reloadTick]);
 
-  const ensureContactsLoaded = useCallback(async () => {
-    if (contactOptions.length > 0 || contactsLoading) return;
-    setContactsLoading(true);
+  const ensureOpportunitiesLoaded = useCallback(async () => {
+    if (opportunityOptions.length > 0 || opportunitiesLoading) return;
+    setOpportunitiesLoading(true);
     try {
-      const res = await fetch("/api/workspace/contacts?page=1&pageSize=50");
+      const res = await fetch("/api/workspace/opportunities");
       const data = (await res.json()) as {
-        rows?: WorkspaceContactPageRow[];
+        rows?: OpportunityPick[];
+        error?: string;
       };
       if (res.ok && Array.isArray(data.rows)) {
-        setContactOptions(
-          data.rows.map((r) => ({
-            id: r.id,
-            name: r.name,
-            contact_type: r.contact_type,
-          })),
-        );
+        setOpportunityOptions(data.rows);
       }
     } catch {
-      // network error swallowed; user can retry by reopening the dialog
+      // picker stays empty; user can open Opportunities first
     } finally {
-      setContactsLoading(false);
+      setOpportunitiesLoading(false);
     }
-  }, [contactOptions.length, contactsLoading]);
+  }, [opportunityOptions.length, opportunitiesLoading]);
 
   const openCreate = () => {
     setFormMode("create");
     setEditingId(null);
     setDetailLoading(false);
-    setFContactA("");
-    setFContactB("");
+    setFMatchId("");
+    setFTitle("");
     setFKind("founder_investor");
-    setFStage("introduced");
+    setFStage("active");
     setFOutcome("");
     setFContext("");
     setFNotes("");
-    setStageHistory([]);
+    setFPairHeadline("");
     setFormError(null);
     setFormOpen(true);
-    void ensureContactsLoaded();
+    void ensureOpportunitiesLoaded();
   };
 
   const openEdit = useCallback(
-    async (m: WorkspaceMatchPageRow) => {
+    async (m: WorkspacePipelineTransactionRow) => {
       setFormMode("edit");
       setEditingId(m.id);
       setFormError(null);
       setFormOpen(true);
       setDetailLoading(true);
-      setFContactA(m.contact_a_id);
-      setFContactB(m.contact_b_id);
+      setFPairHeadline(`${m.contact_a_name} ↔ ${m.contact_b_name}`);
       setFKind(m.kind);
       setFStage(m.stage);
       setFOutcome(m.outcome ?? "");
       setFContext(m.context ?? "");
       setFNotes(m.notes ?? "");
-      setStageHistory([]);
-      void ensureContactsLoaded();
+      setFTitle(m.title ?? "");
       try {
-        const res = await fetch(`/api/workspace/matches/${m.id}`);
-        const data = (await res.json()) as {
+        const res = await fetch(`/api/workspace/match-transactions/${m.id}`);
+        const data = (await res.json()) as WorkspacePipelineTransactionRow & {
           error?: string;
-          contactAId?: string;
-          contactBId?: string;
-          kind?: MatchKind;
-          stage?: MatchStage;
-          outcome?: MatchOutcome | null;
-          context?: string | null;
-          notes?: string | null;
-          stageHistory?: StageHistoryRow[];
         };
         if (!res.ok) {
           setFormError(
             typeof data.error === "string" && data.error.length > 0
               ? data.error
-              : "Could not load match.",
+              : "Could not load deal.",
           );
           return;
         }
-        if (data.contactAId) setFContactA(data.contactAId);
-        if (data.contactBId) setFContactB(data.contactBId);
-        if (data.kind) setFKind(data.kind);
-        if (data.stage) setFStage(data.stage);
+        setFPairHeadline(`${data.contact_a_name} ↔ ${data.contact_b_name}`);
+        setFKind(data.kind);
+        setFStage(data.stage);
         setFOutcome(data.outcome ?? "");
         setFContext(data.context ?? "");
         setFNotes(data.notes ?? "");
-        setStageHistory(
-          Array.isArray(data.stageHistory) ? data.stageHistory : [],
-        );
+        setFTitle(data.title ?? "");
       } catch {
-        setFormError("Network error while loading match.");
+        setFormError("Network error while loading deal.");
       } finally {
         setDetailLoading(false);
       }
     },
-    [ensureContactsLoaded],
+    [],
   );
 
   const closeForm = () => {
@@ -267,54 +245,63 @@ export function MatchCanvasPanel() {
     setFormOpen(false);
     setEditingId(null);
     setDetailLoading(false);
-    setStageHistory([]);
   };
 
   const onSubmitForm = async (e: FormEvent) => {
     e.preventDefault();
     if (detailLoading) return;
-    if (!fContactA || !fContactB) {
-      setFormError("Pick two contacts.");
-      return;
-    }
-    if (fContactA === fContactB) {
-      setFormError("Contacts must be different.");
-      return;
+    if (formMode === "create") {
+      if (!fMatchId) {
+        setFormError("Pick an introduction from Opportunities.");
+        return;
+      }
     }
     if (fStage === "closed" && !fOutcome) {
-      setFormError("Pick an outcome to close this match.");
+      setFormError("Pick an outcome to close this deal.");
       return;
     }
     setFormBusy(true);
     setFormError(null);
-    const payload = {
-      contactAId: fContactA,
-      contactBId: fContactB,
-      kind: fKind,
-      stage: fStage,
-      outcome: fStage === "closed" ? fOutcome || null : null,
-      context: fContext.trim() === "" ? null : fContext.trim(),
-      notes: fNotes.trim() === "" ? null : fNotes.trim(),
-    };
     try {
-      const isEdit = formMode === "edit" && editingId != null;
-      const res = await fetch(
-        isEdit
-          ? `/api/workspace/matches/${editingId}`
-          : "/api/workspace/matches",
-        {
-          method: isEdit ? "PATCH" : "POST",
+      if (formMode === "create" && editingId == null) {
+        const res = await fetch("/api/workspace/match-transactions", {
+          method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        },
-      );
-      const data = (await res.json()) as { error?: string; hint?: string };
-      if (!res.ok) {
-        const parts = [data.error, data.hint].filter(
-          (x): x is string => typeof x === "string" && x.length > 0,
-        );
-        setFormError(parts.length > 0 ? parts.join(" ") : "Could not save.");
-        return;
+          body: JSON.stringify({
+            matchId: fMatchId,
+            title: fTitle.trim() === "" ? null : fTitle.trim(),
+            context: fContext.trim() === "" ? null : fContext.trim(),
+            notes: fNotes.trim() === "" ? null : fNotes.trim(),
+          }),
+        });
+        const data = (await res.json()) as { error?: string; hint?: string };
+        if (!res.ok) {
+          const parts = [data.error, data.hint].filter(
+            (x): x is string => typeof x === "string" && x.length > 0,
+          );
+          setFormError(parts.length > 0 ? parts.join(" ") : "Could not save.");
+          return;
+        }
+      } else if (formMode === "edit" && editingId != null) {
+        const res = await fetch(`/api/workspace/match-transactions/${editingId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: fTitle.trim() === "" ? null : fTitle.trim(),
+            stage: fStage,
+            outcome: fStage === "closed" ? fOutcome || null : null,
+            context: fContext.trim() === "" ? null : fContext.trim(),
+            notes: fNotes.trim() === "" ? null : fNotes.trim(),
+          }),
+        });
+        const data = (await res.json()) as { error?: string; hint?: string };
+        if (!res.ok) {
+          const parts = [data.error, data.hint].filter(
+            (x): x is string => typeof x === "string" && x.length > 0,
+          );
+          setFormError(parts.length > 0 ? parts.join(" ") : "Could not save.");
+          return;
+        }
       }
       setFormOpen(false);
       setEditingId(null);
@@ -328,15 +315,14 @@ export function MatchCanvasPanel() {
 
   const moveStage = useCallback(
     async (
-      matchId: string,
-      toStage: MatchStage,
+      transactionId: string,
+      toStage: PipelineTransactionStage,
       outcome: MatchOutcome | null = null,
     ) => {
-      const source = rows.find((r) => r.id === matchId);
+      const source = rows.find((r) => r.id === transactionId);
       if (!source) return;
       if (source.stage === toStage && source.outcome === outcome) return;
       if (toStage === "closed" && !outcome) {
-        // Surface the outcome picker via the edit drawer rather than failing silently.
         void openEdit({ ...source, stage: "closed" });
         return;
       }
@@ -344,28 +330,35 @@ export function MatchCanvasPanel() {
       const previousRows = rows;
       setRows((prev) =>
         prev.map((row) =>
-          row.id === matchId
-            ? { ...row, stage: toStage, outcome: toStage === "closed" ? outcome : null }
+          row.id === transactionId
+            ? {
+                ...row,
+                stage: toStage,
+                outcome: toStage === "closed" ? outcome : null,
+              }
             : row,
         ),
       );
-      setStageMoveBusyId(matchId);
+      setStageMoveBusyId(transactionId);
       setError(null);
       try {
-        const res = await fetch(`/api/workspace/matches/${matchId}/stage`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ stage: toStage, outcome }),
-        });
+        const res = await fetch(
+          `/api/workspace/match-transactions/${transactionId}/stage`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ stage: toStage, outcome }),
+          },
+        );
         const data = (await res.json()) as ApiErr;
         if (!res.ok) {
           setRows(previousRows);
-          setError(data.error ?? "Could not move match stage.");
+          setError(data.error ?? "Could not move deal stage.");
           return;
         }
       } catch {
         setRows(previousRows);
-        setError("Network error while moving match stage.");
+        setError("Network error while moving deal stage.");
       } finally {
         setStageMoveBusyId(null);
       }
@@ -373,7 +366,7 @@ export function MatchCanvasPanel() {
     [openEdit, rows],
   );
 
-  const onCardDragStart = (e: DragEvent<HTMLDivElement>, matchId: string) => {
+  const onCardDragStart = (e: DragEvent<HTMLDivElement>, id: string) => {
     const dragPreview = e.currentTarget.cloneNode(true) as HTMLDivElement;
     dragPreview.style.position = "absolute";
     dragPreview.style.left = "-9999px";
@@ -387,9 +380,9 @@ export function MatchCanvasPanel() {
     document.body.appendChild(dragPreview);
     e.dataTransfer.setDragImage(dragPreview, 20, 20);
     window.setTimeout(() => dragPreview.remove(), 0);
-    e.dataTransfer.setData("text/plain", matchId);
+    e.dataTransfer.setData("text/plain", id);
     e.dataTransfer.effectAllowed = "move";
-    setDraggingId(matchId);
+    setDraggingId(id);
   };
 
   const onCardDragEnd = () => {
@@ -397,7 +390,10 @@ export function MatchCanvasPanel() {
     setDropStage(null);
   };
 
-  const onColumnDragOver = (e: DragEvent<HTMLElement>, stage: MatchStage) => {
+  const onColumnDragOver = (
+    e: DragEvent<HTMLElement>,
+    stage: PipelineTransactionStage,
+  ) => {
     if (!draggingId) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
@@ -406,7 +402,7 @@ export function MatchCanvasPanel() {
 
   const onColumnDragLeave = (
     e: DragEvent<HTMLElement>,
-    stage: MatchStage,
+    stage: PipelineTransactionStage,
   ) => {
     if (dropStage !== stage) return;
     const next = e.relatedTarget;
@@ -414,19 +410,22 @@ export function MatchCanvasPanel() {
     setDropStage(null);
   };
 
-  const onColumnDrop = async (e: DragEvent<HTMLElement>, stage: MatchStage) => {
+  const onColumnDrop = async (
+    e: DragEvent<HTMLElement>,
+    stage: PipelineTransactionStage,
+  ) => {
     e.preventDefault();
-    const matchId = e.dataTransfer.getData("text/plain") || draggingId;
+    const txId = e.dataTransfer.getData("text/plain") || draggingId;
     setDropStage(null);
-    if (!matchId || stageMoveBusyId) return;
-    const source = rows.find((r) => r.id === matchId);
+    if (!txId || stageMoveBusyId) return;
+    const source = rows.find((r) => r.id === txId);
     if (!source || source.stage === stage) return;
     setDropPulseStage(stage);
     window.setTimeout(
       () => setDropPulseStage((s) => (s === stage ? null : s)),
       180,
     );
-    await moveStage(matchId, stage);
+    await moveStage(txId, stage);
   };
 
   const stageColumns = useMemo(() => {
@@ -442,16 +441,16 @@ export function MatchCanvasPanel() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <h2 className="font-serif text-xl tracking-tight text-charcoal">
-              Match canvas
+              Pipeline
             </h2>
             <p className="mt-1 text-xs text-charcoal-light/80">
               {loading
                 ? "Loading…"
                 : total === 0
                   ? debouncedQuery
-                    ? "No matches for that search."
-                    : "No matches yet — accept a suggestion or pair two contacts."
-                  : `${total} match${total === 1 ? "" : "es"} across all stages`}
+                    ? "No deals for that search."
+                    : "No deals yet — add one from Opportunities after you record an introduction."
+                  : `${total} deal${total === 1 ? "" : "s"} on the board`}
             </p>
           </div>
           <button
@@ -460,16 +459,16 @@ export function MatchCanvasPanel() {
             className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-charcoal px-3 py-2 text-xs font-medium text-cream transition-colors hover:bg-charcoal/90"
           >
             <Plus className="size-3.5" aria-hidden />
-            New match
+            New deal
           </button>
         </div>
         <label className="mt-4 block">
-          <span className="sr-only">Search matches</span>
+          <span className="sr-only">Search deals</span>
           <input
             type="search"
             value={queryInput}
             onChange={(e) => setQueryInput(e.target.value)}
-            placeholder="Search: contact names, context, notes…"
+            placeholder="Search: contacts, title, context, notes…"
             autoComplete="off"
             className="w-full rounded-lg border border-charcoal/15 bg-cream px-3 py-2 text-sm text-charcoal placeholder:text-charcoal-light/50 outline-none ring-charcoal/20 focus:border-charcoal/25 focus:ring-2"
           />
@@ -483,7 +482,7 @@ export function MatchCanvasPanel() {
       ) : null}
 
       <div className="mt-4 overflow-x-auto rounded-xl border border-charcoal/8 bg-cream-light/40 p-3">
-        <div className="grid min-w-[820px] grid-cols-3 gap-3">
+        <div className="grid min-w-[560px] grid-cols-2 gap-3">
           {stageColumns.map((column) => (
             <section
               key={column.id}
@@ -524,7 +523,7 @@ export function MatchCanvasPanel() {
                   ))
                 ) : column.rows.length === 0 ? (
                   <p className="px-1 py-2 text-xs text-charcoal-light/70">
-                    No matches in this stage.
+                    No deals in this stage.
                   </p>
                 ) : (
                   column.rows.map((m) => (
@@ -543,13 +542,18 @@ export function MatchCanvasPanel() {
                         type="button"
                         onClick={() => void openEdit(m)}
                         className="w-full cursor-grab text-left active:cursor-grabbing"
-                        aria-label={`Edit match between ${m.contact_a_name} and ${m.contact_b_name}`}
+                        aria-label={`Edit deal between ${m.contact_a_name} and ${m.contact_b_name}`}
                       >
                         <p className="text-sm font-medium text-charcoal">
                           {m.contact_a_name}{" "}
                           <span className="text-charcoal-light/70">↔</span>{" "}
                           {m.contact_b_name}
                         </p>
+                        {m.title ? (
+                          <p className="mt-0.5 text-xs font-medium text-charcoal-light">
+                            {m.title}
+                          </p>
+                        ) : null}
                         <div className="mt-1 flex flex-wrap items-center gap-1.5">
                           <span
                             className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${KIND_BADGE[m.kind]}`}
@@ -570,7 +574,7 @@ export function MatchCanvasPanel() {
                           </p>
                         ) : null}
                       </button>
-                      <MatchRexTasks matchId={m.id} />
+                      <MatchRexTasks matchId={m.match_id} />
                       <div className="mt-2 flex items-center gap-1.5">
                         {STAGES.filter((x) => x.id !== m.stage).map((target) => (
                           <button
@@ -595,7 +599,7 @@ export function MatchCanvasPanel() {
 
       <WorkspaceCreateDialog
         open={formOpen}
-        title={formMode === "create" ? "New match" : "Edit match"}
+        title={formMode === "create" ? "New pipeline deal" : "Edit deal"}
         onClose={closeForm}
       >
         <form
@@ -605,104 +609,91 @@ export function MatchCanvasPanel() {
         >
           {detailLoading ? (
             <p className="py-6 text-center text-sm text-charcoal-light">
-              Loading match…
+              Loading…
             </p>
           ) : (
             <>
-              <div className="grid grid-cols-2 gap-2">
+              {formMode === "create" ? (
                 <div>
                   <label
-                    htmlFor="match-form-contact-a"
+                    htmlFor="deal-form-opportunity"
                     className={WORKSPACE_FORM_LABEL_CLASS}
                   >
-                    Contact A
+                    Introduction
                   </label>
                   <select
-                    id="match-form-contact-a"
+                    id="deal-form-opportunity"
                     required
-                    disabled={formMode === "edit"}
-                    value={fContactA}
-                    onChange={(e) => setFContactA(e.target.value)}
+                    value={fMatchId}
+                    onChange={(e) => setFMatchId(e.target.value)}
                     className={WORKSPACE_FORM_INPUT_CLASS}
                   >
-                    <option value="">— pick contact —</option>
-                    {contactOptions.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                        {c.contact_type ? ` · ${c.contact_type}` : ""}
+                    <option value="">— pick an opportunity —</option>
+                    {opportunityOptions.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.contact_a_name} ↔ {o.contact_b_name}
                       </option>
                     ))}
                   </select>
+                  {opportunitiesLoading ? (
+                    <p className="mt-1 text-[11px] text-charcoal-light/70">
+                      Loading opportunities…
+                    </p>
+                  ) : opportunityOptions.length === 0 ? (
+                    <p className="mt-1 text-[11px] text-charcoal-light/80">
+                      Record an introduction under{" "}
+                      <span className="font-medium text-charcoal">
+                        Opportunities
+                      </span>{" "}
+                      first.
+                    </p>
+                  ) : null}
                 </div>
-                <div>
-                  <label
-                    htmlFor="match-form-contact-b"
-                    className={WORKSPACE_FORM_LABEL_CLASS}
+              ) : (
+                <div className="rounded-lg border border-charcoal/10 bg-cream-light/40 px-3 py-2">
+                  <p className="text-[11px] font-medium uppercase tracking-wide text-charcoal-light/80">
+                    Pair
+                  </p>
+                  <p className="text-sm font-medium text-charcoal">
+                    {fPairHeadline}
+                  </p>
+                  <span
+                    className={`mt-2 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${KIND_BADGE[fKind]}`}
                   >
-                    Contact B
-                  </label>
-                  <select
-                    id="match-form-contact-b"
-                    required
-                    disabled={formMode === "edit"}
-                    value={fContactB}
-                    onChange={(e) => setFContactB(e.target.value)}
-                    className={WORKSPACE_FORM_INPUT_CLASS}
-                  >
-                    <option value="">— pick contact —</option>
-                    {contactOptions.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                        {c.contact_type ? ` · ${c.contact_type}` : ""}
-                      </option>
-                    ))}
-                  </select>
+                    {kindLabel(fKind)}
+                  </span>
                 </div>
-              </div>
-              {formMode === "edit" ? (
-                <p className="text-[11px] text-charcoal-light/70">
-                  Contacts are locked on an existing match. Create a new match if
-                  the pairing is different.
-                </p>
-              ) : null}
-              {contactsLoading ? (
-                <p className="text-[11px] text-charcoal-light/70">
-                  Loading contacts…
-                </p>
-              ) : null}
+              )}
               <div>
                 <label
-                  htmlFor="match-form-kind"
+                  htmlFor="deal-form-title"
                   className={WORKSPACE_FORM_LABEL_CLASS}
                 >
-                  Kind
+                  Deal label (optional)
                 </label>
-                <select
-                  id="match-form-kind"
-                  value={fKind}
-                  onChange={(e) => setFKind(e.target.value as MatchKind)}
+                <input
+                  id="deal-form-title"
+                  type="text"
+                  value={fTitle}
+                  onChange={(e) => setFTitle(e.target.value)}
                   className={WORKSPACE_FORM_INPUT_CLASS}
-                >
-                  {KINDS.map((k) => (
-                    <option key={k.id} value={k.id}>
-                      {k.label}
-                    </option>
-                  ))}
-                </select>
+                  placeholder="e.g. Series A, venture debt"
+                  autoComplete="off"
+                />
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label
-                    htmlFor="match-form-stage"
+                    htmlFor="deal-form-stage"
                     className={WORKSPACE_FORM_LABEL_CLASS}
                   >
                     Stage
                   </label>
                   <select
-                    id="match-form-stage"
+                    id="deal-form-stage"
                     value={fStage}
                     onChange={(e) => {
-                      const next = e.target.value as MatchStage;
+                      const next = e.target.value as PipelineTransactionStage;
                       setFStage(next);
                       if (next !== "closed") setFOutcome("");
                     }}
@@ -717,13 +708,13 @@ export function MatchCanvasPanel() {
                 </div>
                 <div>
                   <label
-                    htmlFor="match-form-outcome"
+                    htmlFor="deal-form-outcome"
                     className={WORKSPACE_FORM_LABEL_CLASS}
                   >
                     Outcome {fStage === "closed" ? "*" : "(closed only)"}
                   </label>
                   <select
-                    id="match-form-outcome"
+                    id="deal-form-outcome"
                     value={fOutcome}
                     disabled={fStage !== "closed"}
                     onChange={(e) =>
@@ -742,29 +733,29 @@ export function MatchCanvasPanel() {
               </div>
               <div>
                 <label
-                  htmlFor="match-form-context"
+                  htmlFor="deal-form-context"
                   className={WORKSPACE_FORM_LABEL_CLASS}
                 >
                   Context
                 </label>
                 <textarea
-                  id="match-form-context"
+                  id="deal-form-context"
                   value={fContext}
                   onChange={(e) => setFContext(e.target.value)}
                   rows={3}
                   className={`${WORKSPACE_FORM_INPUT_CLASS} resize-y`}
-                  placeholder="Why these two? Sector, cheque size, intro reason."
+                  placeholder="What is this specific transaction about?"
                 />
               </div>
               <div>
                 <label
-                  htmlFor="match-form-notes"
+                  htmlFor="deal-form-notes"
                   className={WORKSPACE_FORM_LABEL_CLASS}
                 >
                   Notes
                 </label>
                 <textarea
-                  id="match-form-notes"
+                  id="deal-form-notes"
                   value={fNotes}
                   onChange={(e) => setFNotes(e.target.value)}
                   rows={2}
@@ -772,34 +763,6 @@ export function MatchCanvasPanel() {
                   placeholder="Internal-only notes."
                 />
               </div>
-              {formMode === "edit" ? (
-                <div>
-                  <p className={WORKSPACE_FORM_LABEL_CLASS}>Stage history</p>
-                  <div className="max-h-36 space-y-1 overflow-y-auto rounded-lg border border-charcoal/10 bg-cream-light/30 p-2">
-                    {stageHistory.length === 0 ? (
-                      <p className="text-xs text-charcoal-light/80">
-                        No stage changes yet.
-                      </p>
-                    ) : (
-                      stageHistory.map((row) => (
-                        <p
-                          key={row.id}
-                          className="text-xs text-charcoal-light/90"
-                        >
-                          {row.from_stage
-                            ? `${stageLabel(row.from_stage)} → `
-                            : "Created at "}
-                          {stageLabel(row.to_stage)}{" "}
-                          <span className="text-charcoal-light/70">
-                            {new Date(row.changed_at).toLocaleString()}
-                            {row.changed_by ? ` by ${row.changed_by}` : ""}
-                          </span>
-                        </p>
-                      ))
-                    )}
-                  </div>
-                </div>
-              ) : null}
             </>
           )}
           {formError ? (
@@ -824,7 +787,7 @@ export function MatchCanvasPanel() {
               {formBusy
                 ? "Saving…"
                 : formMode === "create"
-                  ? "Add match"
+                  ? "Add deal"
                   : "Save changes"}
             </button>
           </div>
