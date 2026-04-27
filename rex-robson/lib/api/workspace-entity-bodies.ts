@@ -4,6 +4,10 @@ import {
   parseOptionalUuid,
   parseRequiredString,
 } from "@/lib/api/workspace-post-parse";
+import type {
+  PipelineInternalComment,
+  PipelineInternalTodo,
+} from "@/lib/data/workspace-matches-page.types";
 import {
   INTERNAL_CONTACT_OWNERS,
   isInternalContactOwner,
@@ -289,50 +293,203 @@ export function parseCreateMatchTransactionBody(
   };
 }
 
-export type MatchTransactionUpsertBody = {
-  title: string | null;
-  stage: PipelineTransactionStage;
-  outcome: MatchOutcome | null;
-  context: string | null;
-  notes: string | null;
-};
+const MAX_PIPELINE_INTERNAL_COMMENTS = 80;
+const MAX_PIPELINE_INTERNAL_TODOS = 120;
+const MAX_PIPELINE_COMMENT_BODY = 4000;
+const MAX_PIPELINE_TODO_BODY = 500;
 
-export function parseMatchTransactionUpsertBody(
-  body: Record<string, unknown>,
+function parsePipelineInternalCommentsField(
+  raw: unknown,
 ):
-  | { ok: true; value: MatchTransactionUpsertBody }
+  | { ok: true; value: PipelineInternalComment[] }
   | { ok: false; error: string } {
-  const title = parseOptionalString(body, "title", 300);
-  if (!title.ok) return title;
-  const stageRaw = parseRequiredString(body, "stage", 40);
-  if (!stageRaw.ok) return stageRaw;
-  const st = stageRaw.value.trim();
-  const stage: PipelineTransactionStage | null =
-    st === "active" || st === "closed" ? st : null;
-  if (!stage) {
+  if (!Array.isArray(raw)) {
+    return { ok: false, error: "internalComments must be an array." };
+  }
+  if (raw.length > MAX_PIPELINE_INTERNAL_COMMENTS) {
     return {
       ok: false,
-      error: "stage must be one of: active, closed.",
+      error: `internalComments must have at most ${MAX_PIPELINE_INTERNAL_COMMENTS} items.`,
     };
   }
-  const outcomeRaw = parseOptionalString(body, "outcome", 40);
-  if (!outcomeRaw.ok) return outcomeRaw;
-  const outcome = stage === "closed" ? parseOutcome(outcomeRaw.value) : null;
-  const context = parseOptionalString(body, "context", 8000);
-  if (!context.ok) return context;
-  const notes = parseOptionalString(body, "notes", 8000);
-  if (!notes.ok) return notes;
-  return {
-    ok: true,
-    value: {
-      title: title.value,
-      stage,
-      outcome,
-      context: context.value,
-      notes: notes.value,
-    },
-  };
+  const out: PipelineInternalComment[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") {
+      return { ok: false, error: "Each internal comment must be an object." };
+    }
+    const o = item as Record<string, unknown>;
+    const id = o.id;
+    const body = o.body;
+    const created_at = o.created_at;
+    if (typeof id !== "string" || !isValidUuid(id.trim())) {
+      return {
+        ok: false,
+        error: "Each internal comment needs a valid id (UUID).",
+      };
+    }
+    if (typeof body !== "string") {
+      return { ok: false, error: "Each internal comment needs a body string." };
+    }
+    const b = body.trim();
+    if (b.length === 0) {
+      return { ok: false, error: "Internal comment body cannot be empty." };
+    }
+    if (b.length > MAX_PIPELINE_COMMENT_BODY) {
+      return {
+        ok: false,
+        error: `Internal comment body must be at most ${MAX_PIPELINE_COMMENT_BODY} characters.`,
+      };
+    }
+    if (typeof created_at !== "string" || created_at.trim().length === 0) {
+      return { ok: false, error: "Each internal comment needs created_at." };
+    }
+    out.push({ id: id.trim(), body: b, created_at: created_at.trim() });
+  }
+  return { ok: true, value: out };
 }
+
+function parsePipelineInternalTodosField(
+  raw: unknown,
+):
+  | { ok: true; value: PipelineInternalTodo[] }
+  | { ok: false; error: string } {
+  if (!Array.isArray(raw)) {
+    return { ok: false, error: "internalTodos must be an array." };
+  }
+  if (raw.length > MAX_PIPELINE_INTERNAL_TODOS) {
+    return {
+      ok: false,
+      error: `internalTodos must have at most ${MAX_PIPELINE_INTERNAL_TODOS} items.`,
+    };
+  }
+  const out: PipelineInternalTodo[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") {
+      return { ok: false, error: "Each internal to-do must be an object." };
+    }
+    const o = item as Record<string, unknown>;
+    const id = o.id;
+    const body = o.body;
+    const done = o.done;
+    const created_at = o.created_at;
+    if (typeof id !== "string" || !isValidUuid(id.trim())) {
+      return {
+        ok: false,
+        error: "Each internal to-do needs a valid id (UUID).",
+      };
+    }
+    if (typeof body !== "string") {
+      return { ok: false, error: "Each internal to-do needs a body string." };
+    }
+    const b = body.trim();
+    if (b.length === 0) {
+      return { ok: false, error: "Internal to-do body cannot be empty." };
+    }
+    if (b.length > MAX_PIPELINE_TODO_BODY) {
+      return {
+        ok: false,
+        error: `Internal to-do body must be at most ${MAX_PIPELINE_TODO_BODY} characters.`,
+      };
+    }
+    if (typeof done !== "boolean") {
+      return { ok: false, error: "Each internal to-do needs done (boolean)." };
+    }
+    if (typeof created_at !== "string" || created_at.trim().length === 0) {
+      return { ok: false, error: "Each internal to-do needs created_at." };
+    }
+    out.push({
+      id: id.trim(),
+      body: b,
+      done,
+      created_at: created_at.trim(),
+    });
+  }
+  return { ok: true, value: out };
+}
+
+/** Partial update: only keys present in the JSON body are applied. */
+export type MatchTransactionPatchBody = {
+  title?: string | null;
+  stage?: PipelineTransactionStage;
+  outcome?: MatchOutcome | null;
+  context?: string | null;
+  notes?: string | null;
+  internalComments?: PipelineInternalComment[];
+  internalTodos?: PipelineInternalTodo[];
+};
+
+export function parseMatchTransactionPatchBody(
+  body: Record<string, unknown>,
+):
+  | { ok: true; value: MatchTransactionPatchBody }
+  | { ok: false; error: string } {
+  const value: MatchTransactionPatchBody = {};
+  let any = false;
+
+  if (Object.hasOwn(body, "title")) {
+    any = true;
+    const title = parseOptionalString(body, "title", 300);
+    if (!title.ok) return title;
+    value.title = title.value;
+  }
+  if (Object.hasOwn(body, "stage")) {
+    any = true;
+    const stageRaw = body.stage;
+    if (typeof stageRaw !== "string") {
+      return { ok: false, error: "stage must be a string." };
+    }
+    const st = stageRaw.trim();
+    const stage: PipelineTransactionStage | null =
+      st === "active" || st === "closed" ? st : null;
+    if (!stage) {
+      return {
+        ok: false,
+        error: "stage must be one of: active, closed.",
+      };
+    }
+    value.stage = stage;
+  }
+  if (Object.hasOwn(body, "outcome")) {
+    any = true;
+    const outcomeRaw = parseOptionalString(body, "outcome", 40);
+    if (!outcomeRaw.ok) return outcomeRaw;
+    value.outcome = parseOutcome(outcomeRaw.value);
+  }
+  if (Object.hasOwn(body, "context")) {
+    any = true;
+    const context = parseOptionalString(body, "context", 8000);
+    if (!context.ok) return context;
+    value.context = context.value;
+  }
+  if (Object.hasOwn(body, "notes")) {
+    any = true;
+    const notes = parseOptionalString(body, "notes", 8000);
+    if (!notes.ok) return notes;
+    value.notes = notes.value;
+  }
+  if (Object.hasOwn(body, "internalComments")) {
+    any = true;
+    const ic = parsePipelineInternalCommentsField(body.internalComments);
+    if (!ic.ok) return ic;
+    value.internalComments = ic.value;
+  }
+  if (Object.hasOwn(body, "internalTodos")) {
+    any = true;
+    const it = parsePipelineInternalTodosField(body.internalTodos);
+    if (!it.ok) return it;
+    value.internalTodos = it.value;
+  }
+
+  if (!any) {
+    return { ok: false, error: "At least one field is required." };
+  }
+  return { ok: true, value };
+}
+
+/** @deprecated Use MatchTransactionPatchBody */
+export type MatchTransactionUpsertBody = MatchTransactionPatchBody;
+/** @deprecated Use parseMatchTransactionPatchBody */
+export const parseMatchTransactionUpsertBody = parseMatchTransactionPatchBody;
 
 /** @deprecated Use parseOpportunityStageBody */
 export const parseMatchStageBody = parseOpportunityStageBody;

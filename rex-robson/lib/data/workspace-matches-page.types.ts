@@ -7,6 +7,21 @@ export type OpportunityStage = "introduced" | "closed";
 /** A single deal on the pipeline (many per opportunity / match). */
 export type PipelineTransactionStage = "active" | "closed";
 
+/** Internal workspace comment on a pipeline deal (not Rex). */
+export type PipelineInternalComment = {
+  id: string;
+  body: string;
+  created_at: string;
+};
+
+/** Internal workspace to-do on a pipeline deal (not Rex). */
+export type PipelineInternalTodo = {
+  id: string;
+  body: string;
+  done: boolean;
+  created_at: string;
+};
+
 export type WorkspacePipelineTransactionRow = {
   id: string;
   match_id: string;
@@ -20,6 +35,8 @@ export type WorkspacePipelineTransactionRow = {
   context: string | null;
   notes: string | null;
   title: string | null;
+  internal_comments: PipelineInternalComment[];
+  internal_todos: PipelineInternalTodo[];
 };
 
 /** @deprecated Use WorkspacePipelineTransactionRow — kept as alias for incremental refactors. */

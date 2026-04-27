@@ -1,11 +1,19 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  ListTodo,
+  MessageSquare,
+  Plus,
+} from "lucide-react";
 import type { DragEvent, FormEvent } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   type MatchKind,
   type MatchOutcome,
+  type PipelineInternalComment,
+  type PipelineInternalTodo,
   type PipelineTransactionStage,
   type WorkspacePipelineTransactionRow,
 } from "@/lib/data/workspace-matches-page.types";
@@ -60,6 +68,239 @@ function kindLabel(kind: MatchKind) {
 function outcomeLabel(outcome: MatchOutcome | null) {
   if (!outcome) return null;
   return OUTCOMES.find((o) => o.id === outcome)?.label ?? outcome;
+}
+
+function formatDealWorkspaceTimestamp(iso: string) {
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    return d.toLocaleString(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
+}
+
+function PipelineDealInternalSection({
+  deal,
+  expanded,
+  onToggleExpand,
+  onAfterPatch,
+}: {
+  deal: WorkspacePipelineTransactionRow;
+  expanded: boolean;
+  onToggleExpand: () => void;
+  onAfterPatch: () => void;
+}) {
+  const [commentDraft, setCommentDraft] = useState("");
+  const [todoDraft, setTodoDraft] = useState("");
+  const [localError, setLocalError] = useState<string | null>(null);
+  const [patchBusy, setPatchBusy] = useState(false);
+
+  const runPatch = async (body: Record<string, unknown>) => {
+    setLocalError(null);
+    setPatchBusy(true);
+    try {
+      const res = await fetch(`/api/workspace/match-transactions/${deal.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        setLocalError(data.error ?? "Could not save.");
+        return;
+      }
+      onAfterPatch();
+    } catch {
+      setLocalError("Network error.");
+    } finally {
+      setPatchBusy(false);
+    }
+  };
+
+  const nComments = deal.internal_comments.length;
+  const nTodos = deal.internal_todos.length;
+  const nOpenTodos = deal.internal_todos.filter((t) => !t.done).length;
+
+  return (
+    <div className="mt-2 border-t border-charcoal/10 pt-2">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggleExpand();
+        }}
+        className="flex w-full items-center justify-between gap-2 rounded-md px-1 py-1.5 text-left text-[11px] font-medium text-charcoal-light transition-colors hover:bg-charcoal/5 hover:text-charcoal"
+      >
+        <span className="flex min-w-0 items-center gap-1.5">
+          {expanded ? (
+            <ChevronDown className="size-3.5 shrink-0" aria-hidden />
+          ) : (
+            <ChevronRight className="size-3.5 shrink-0" aria-hidden />
+          )}
+          <MessageSquare className="size-3.5 shrink-0 opacity-70" aria-hidden />
+          <span className="truncate">Team workspace</span>
+        </span>
+        <span className="shrink-0 text-right text-[10px] text-charcoal-light/80">
+          {nComments > 0
+            ? `${nComments} comment${nComments === 1 ? "" : "s"}`
+            : ""}
+          {nComments > 0 && nTodos > 0 ? " · " : ""}
+          {nTodos > 0
+            ? `${nOpenTodos}/${nTodos} to-do${nTodos === 1 ? "" : "s"}`
+            : ""}
+          {nComments === 0 && nTodos === 0 ? "Add notes & to-dos" : ""}
+        </span>
+      </button>
+      {expanded ? (
+        <div
+          className="mt-2 space-y-3 rounded-md border border-charcoal/10 bg-cream/80 p-2"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {localError ? (
+            <p className="text-[11px] text-red-700/90" role="alert">
+              {localError}
+            </p>
+          ) : null}
+          <div>
+            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-charcoal-light/90">
+              Comments
+            </p>
+            <p className="mb-1.5 text-[10px] text-charcoal-light/75">
+              Internal only — not Rex tasks.
+            </p>
+            <div className="max-h-28 space-y-1.5 overflow-y-auto">
+              {[...deal.internal_comments].reverse().map((c) => (
+                <div
+                  key={c.id}
+                  className="rounded border border-charcoal/8 bg-cream px-2 py-1.5 text-[11px] text-charcoal"
+                >
+                  <p className="whitespace-pre-wrap">{c.body}</p>
+                  <p className="mt-0.5 text-[10px] text-charcoal-light/70">
+                    {formatDealWorkspaceTimestamp(c.created_at)}
+                  </p>
+                </div>
+              ))}
+              {deal.internal_comments.length === 0 ? (
+                <p className="text-[11px] text-charcoal-light/70">
+                  No comments yet.
+                </p>
+              ) : null}
+            </div>
+            <div className="mt-1.5 flex gap-1">
+              <input
+                type="text"
+                value={commentDraft}
+                onChange={(e) => setCommentDraft(e.target.value)}
+                placeholder="Add a comment…"
+                disabled={patchBusy}
+                className="min-w-0 flex-1 rounded border border-charcoal/15 bg-cream px-2 py-1 text-[11px] text-charcoal outline-none ring-charcoal/15 focus:ring-1"
+              />
+              <button
+                type="button"
+                disabled={patchBusy || commentDraft.trim().length === 0}
+                onClick={async () => {
+                  const t = commentDraft.trim();
+                  if (!t) return;
+                  await runPatch({
+                    internalComments: [
+                      ...deal.internal_comments,
+                      {
+                        id: crypto.randomUUID(),
+                        body: t,
+                        created_at: new Date().toISOString(),
+                      },
+                    ],
+                  });
+                  setCommentDraft("");
+                }}
+                className="shrink-0 rounded border border-charcoal/20 bg-charcoal px-2 py-1 text-[10px] font-medium text-cream disabled:opacity-40"
+              >
+                Add
+              </button>
+            </div>
+          </div>
+          <div>
+            <p className="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-charcoal-light/90">
+              <ListTodo className="size-3" aria-hidden />
+              Internal to-dos
+            </p>
+            <ul className="max-h-24 space-y-1 overflow-y-auto">
+              {deal.internal_todos.map((t) => (
+                <li key={t.id} className="flex items-start gap-2 text-[11px]">
+                  <input
+                    type="checkbox"
+                    checked={t.done}
+                    disabled={patchBusy}
+                    onChange={async () => {
+                      await runPatch({
+                        internalTodos: deal.internal_todos.map((x) =>
+                          x.id === t.id ? { ...x, done: !x.done } : x,
+                        ),
+                      });
+                    }}
+                    className="mt-0.5 rounded border-charcoal/25"
+                  />
+                  <span
+                    className={
+                      t.done
+                        ? "text-charcoal-light line-through"
+                        : "text-charcoal"
+                    }
+                  >
+                    {t.body}
+                  </span>
+                </li>
+              ))}
+              {deal.internal_todos.length === 0 ? (
+                <li className="text-[11px] text-charcoal-light/70">
+                  No to-dos yet.
+                </li>
+              ) : null}
+            </ul>
+            <div className="mt-1.5 flex gap-1">
+              <input
+                type="text"
+                value={todoDraft}
+                onChange={(e) => setTodoDraft(e.target.value)}
+                placeholder="Add a to-do…"
+                disabled={patchBusy}
+                className="min-w-0 flex-1 rounded border border-charcoal/15 bg-cream px-2 py-1 text-[11px] text-charcoal outline-none ring-charcoal/15 focus:ring-1"
+              />
+              <button
+                type="button"
+                disabled={patchBusy || todoDraft.trim().length === 0}
+                onClick={async () => {
+                  const t = todoDraft.trim();
+                  if (!t) return;
+                  await runPatch({
+                    internalTodos: [
+                      ...deal.internal_todos,
+                      {
+                        id: crypto.randomUUID(),
+                        body: t,
+                        done: false,
+                        created_at: new Date().toISOString(),
+                      },
+                    ],
+                  });
+                  setTodoDraft("");
+                }}
+                className="shrink-0 rounded border border-charcoal/20 bg-charcoal px-2 py-1 text-[10px] font-medium text-cream disabled:opacity-40"
+              >
+                Add
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 const OUTCOME_PILL: Record<MatchOutcome, string> = {
@@ -118,6 +359,17 @@ export function MatchCanvasPanel() {
   const [fNotes, setFNotes] = useState("");
   /** Display-only in edit mode */
   const [fPairHeadline, setFPairHeadline] = useState("");
+  const [fInternalComments, setFInternalComments] = useState<
+    PipelineInternalComment[]
+  >([]);
+  const [fInternalTodos, setFInternalTodos] = useState<PipelineInternalTodo[]>(
+    [],
+  );
+  const [fTeamCommentDraft, setFTeamCommentDraft] = useState("");
+  const [fTeamTodoDraft, setFTeamTodoDraft] = useState("");
+  const [internalExpandedId, setInternalExpandedId] = useState<string | null>(
+    null,
+  );
 
   useEffect(() => {
     const t = window.setTimeout(() => setDebouncedQuery(queryInput.trim()), 320);
@@ -192,6 +444,10 @@ export function MatchCanvasPanel() {
     setFContext("");
     setFNotes("");
     setFPairHeadline("");
+    setFInternalComments([]);
+    setFInternalTodos([]);
+    setFTeamCommentDraft("");
+    setFTeamTodoDraft("");
     setFormError(null);
     setFormOpen(true);
     void ensureOpportunitiesLoaded();
@@ -204,6 +460,8 @@ export function MatchCanvasPanel() {
       setFormError(null);
       setFormOpen(true);
       setDetailLoading(true);
+      setFTeamCommentDraft("");
+      setFTeamTodoDraft("");
       setFPairHeadline(`${m.contact_a_name} ↔ ${m.contact_b_name}`);
       setFKind(m.kind);
       setFStage(m.stage);
@@ -211,6 +469,8 @@ export function MatchCanvasPanel() {
       setFContext(m.context ?? "");
       setFNotes(m.notes ?? "");
       setFTitle(m.title ?? "");
+      setFInternalComments(m.internal_comments ?? []);
+      setFInternalTodos(m.internal_todos ?? []);
       try {
         const res = await fetch(`/api/workspace/match-transactions/${m.id}`);
         const data = (await res.json()) as WorkspacePipelineTransactionRow & {
@@ -231,6 +491,8 @@ export function MatchCanvasPanel() {
         setFContext(data.context ?? "");
         setFNotes(data.notes ?? "");
         setFTitle(data.title ?? "");
+        setFInternalComments(data.internal_comments ?? []);
+        setFInternalTodos(data.internal_todos ?? []);
       } catch {
         setFormError("Network error while loading deal.");
       } finally {
@@ -292,6 +554,8 @@ export function MatchCanvasPanel() {
             outcome: fStage === "closed" ? fOutcome || null : null,
             context: fContext.trim() === "" ? null : fContext.trim(),
             notes: fNotes.trim() === "" ? null : fNotes.trim(),
+            internalComments: fInternalComments,
+            internalTodos: fInternalTodos,
           }),
         });
         const data = (await res.json()) as { error?: string; hint?: string };
@@ -468,7 +732,7 @@ export function MatchCanvasPanel() {
             type="search"
             value={queryInput}
             onChange={(e) => setQueryInput(e.target.value)}
-            placeholder="Search: contacts, title, context, notes…"
+            placeholder="Search: contacts, title, context, notes, team workspace…"
             autoComplete="off"
             className="w-full rounded-lg border border-charcoal/15 bg-cream px-3 py-2 text-sm text-charcoal placeholder:text-charcoal-light/50 outline-none ring-charcoal/20 focus:border-charcoal/25 focus:ring-2"
           />
@@ -575,6 +839,16 @@ export function MatchCanvasPanel() {
                         ) : null}
                       </button>
                       <MatchRexTasks matchId={m.match_id} />
+                      <PipelineDealInternalSection
+                        deal={m}
+                        expanded={internalExpandedId === m.id}
+                        onToggleExpand={() =>
+                          setInternalExpandedId((cur) =>
+                            cur === m.id ? null : m.id,
+                          )
+                        }
+                        onAfterPatch={() => setReloadTick((n) => n + 1)}
+                      />
                       <div className="mt-2 flex items-center gap-1.5">
                         {STAGES.filter((x) => x.id !== m.stage).map((target) => (
                           <button
@@ -763,6 +1037,165 @@ export function MatchCanvasPanel() {
                   placeholder="Internal-only notes."
                 />
               </div>
+              {formMode === "edit" ? (
+                <div className="rounded-lg border border-charcoal/10 bg-cream-light/50 p-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-charcoal-light/90">
+                    Team workspace
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-charcoal-light/75">
+                    Comments and to-dos stay internal — they are not Rex tasks.
+                  </p>
+                  <div className="mt-3">
+                    <p className={WORKSPACE_FORM_LABEL_CLASS}>Comments</p>
+                    <div className="max-h-32 space-y-1.5 overflow-y-auto rounded-md border border-charcoal/10 bg-cream p-2">
+                      {[...fInternalComments].reverse().map((c) => (
+                        <div
+                          key={c.id}
+                          className="rounded border border-charcoal/8 bg-cream-light/40 px-2 py-1.5 text-xs text-charcoal"
+                        >
+                          <p className="whitespace-pre-wrap">{c.body}</p>
+                          <p className="mt-0.5 text-[10px] text-charcoal-light/70">
+                            {formatDealWorkspaceTimestamp(c.created_at)}
+                          </p>
+                        </div>
+                      ))}
+                      {fInternalComments.length === 0 ? (
+                        <p className="text-xs text-charcoal-light/70">
+                          No comments yet.
+                        </p>
+                      ) : null}
+                    </div>
+                    <div className="mt-2 flex gap-2">
+                      <input
+                        type="text"
+                        value={fTeamCommentDraft}
+                        onChange={(e) => setFTeamCommentDraft(e.target.value)}
+                        placeholder="Add a comment…"
+                        className={WORKSPACE_FORM_INPUT_CLASS}
+                        onKeyDown={(e) => {
+                          if (e.key !== "Enter") return;
+                          e.preventDefault();
+                          const t = fTeamCommentDraft.trim();
+                          if (!t) return;
+                          setFInternalComments((prev) => [
+                            ...prev,
+                            {
+                              id: crypto.randomUUID(),
+                              body: t,
+                              created_at: new Date().toISOString(),
+                            },
+                          ]);
+                          setFTeamCommentDraft("");
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className={WORKSPACE_FORM_BTN_SECONDARY}
+                        onClick={() => {
+                          const t = fTeamCommentDraft.trim();
+                          if (!t) return;
+                          setFInternalComments((prev) => [
+                            ...prev,
+                            {
+                              id: crypto.randomUUID(),
+                              body: t,
+                              created_at: new Date().toISOString(),
+                            },
+                          ]);
+                          setFTeamCommentDraft("");
+                        }}
+                      >
+                        Add
+                      </button>
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    <p className={WORKSPACE_FORM_LABEL_CLASS}>
+                      Internal to-dos
+                    </p>
+                    <ul className="max-h-28 space-y-1.5 overflow-y-auto rounded-md border border-charcoal/10 bg-cream p-2">
+                      {fInternalTodos.map((t) => (
+                        <li
+                          key={t.id}
+                          className="flex items-start gap-2 text-xs text-charcoal"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={t.done}
+                            onChange={() =>
+                              setFInternalTodos((prev) =>
+                                prev.map((x) =>
+                                  x.id === t.id ? { ...x, done: !x.done } : x,
+                                ),
+                              )
+                            }
+                            className="mt-0.5 rounded border-charcoal/25"
+                          />
+                          <span
+                            className={
+                              t.done
+                                ? "text-charcoal-light line-through"
+                                : undefined
+                            }
+                          >
+                            {t.body}
+                          </span>
+                        </li>
+                      ))}
+                      {fInternalTodos.length === 0 ? (
+                        <li className="text-xs text-charcoal-light/70">
+                          No to-dos yet.
+                        </li>
+                      ) : null}
+                    </ul>
+                    <div className="mt-2 flex gap-2">
+                      <input
+                        type="text"
+                        value={fTeamTodoDraft}
+                        onChange={(e) => setFTeamTodoDraft(e.target.value)}
+                        placeholder="Add a to-do…"
+                        className={WORKSPACE_FORM_INPUT_CLASS}
+                        onKeyDown={(e) => {
+                          if (e.key !== "Enter") return;
+                          e.preventDefault();
+                          const t = fTeamTodoDraft.trim();
+                          if (!t) return;
+                          setFInternalTodos((prev) => [
+                            ...prev,
+                            {
+                              id: crypto.randomUUID(),
+                              body: t,
+                              done: false,
+                              created_at: new Date().toISOString(),
+                            },
+                          ]);
+                          setFTeamTodoDraft("");
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className={WORKSPACE_FORM_BTN_SECONDARY}
+                        onClick={() => {
+                          const t = fTeamTodoDraft.trim();
+                          if (!t) return;
+                          setFInternalTodos((prev) => [
+                            ...prev,
+                            {
+                              id: crypto.randomUUID(),
+                              body: t,
+                              done: false,
+                              created_at: new Date().toISOString(),
+                            },
+                          ]);
+                          setFTeamTodoDraft("");
+                        }}
+                      >
+                        Add
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
             </>
           )}
           {formError ? (

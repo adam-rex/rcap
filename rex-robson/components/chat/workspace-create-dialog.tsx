@@ -25,6 +25,8 @@ type WorkspaceCreateDialogProps = {
   title: string;
   onClose: () => void;
   children: ReactNode;
+  /** Full-viewport sheet (e.g. contact create/edit). Default: centered modal. */
+  variant?: "modal" | "fullscreen";
 };
 
 export function WorkspaceCreateDialog({
@@ -32,6 +34,7 @@ export function WorkspaceCreateDialog({
   title,
   onClose,
   children,
+  variant = "modal",
 }: WorkspaceCreateDialogProps) {
   // Mount-detect so we only call createPortal client-side (avoids SSR mismatch).
   const [mounted, setMounted] = useState(false);
@@ -51,12 +54,18 @@ export function WorkspaceCreateDialog({
 
   if (!open || !mounted) return null;
 
+  const fullscreen = variant === "fullscreen";
+
   // Portaling to document.body decouples the overlay from any draggable/clickable
   // ancestor in the React tree (e.g. match-canvas cards), so dragstart on a button
   // inside the dialog can't bubble into the card and trigger a stage move.
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center p-0 pt-[env(safe-area-inset-top,0px)] sm:items-center sm:p-4"
+      className={
+        fullscreen
+          ? "fixed inset-0 z-50 flex items-stretch justify-stretch p-0 pt-[env(safe-area-inset-top,0px)]"
+          : "fixed inset-0 z-50 flex items-end justify-center p-0 pt-[env(safe-area-inset-top,0px)] sm:items-center sm:p-4"
+      }
       draggable={false}
       onMouseDown={(e) => e.stopPropagation()}
       onDragStart={(e) => {
@@ -74,9 +83,13 @@ export function WorkspaceCreateDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="workspace-create-title"
-        className="relative mt-auto max-h-[min(90dvh,calc(100dvh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)))] w-full max-w-md overflow-y-auto rounded-t-xl border border-charcoal/15 bg-cream pb-[env(safe-area-inset-bottom,0px)] shadow-xl sm:mt-0 sm:max-h-[90dvh] sm:rounded-xl"
+        className={
+          fullscreen
+            ? "relative flex h-[min(100dvh,calc(100dvh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)))] w-full max-w-none flex-col overflow-hidden border-0 border-charcoal/15 bg-cream shadow-none"
+            : "relative mt-auto max-h-[min(90dvh,calc(100dvh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)))] w-full max-w-md overflow-y-auto rounded-t-xl border border-charcoal/15 bg-cream pb-[env(safe-area-inset-bottom,0px)] shadow-xl sm:mt-0 sm:max-h-[90dvh] sm:rounded-xl"
+        }
       >
-        <div className="flex items-center justify-between gap-3 border-b border-charcoal/10 px-4 py-3">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-charcoal/10 px-4 py-3">
           <h3
             id="workspace-create-title"
             className="font-serif text-lg tracking-tight text-charcoal"
@@ -92,7 +105,13 @@ export function WorkspaceCreateDialog({
             ×
           </button>
         </div>
-        {children}
+        {fullscreen ? (
+          <div className="min-h-0 flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom,0px)]">
+            {children}
+          </div>
+        ) : (
+          children
+        )}
       </div>
     </div>,
     document.body,

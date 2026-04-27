@@ -12,6 +12,14 @@ import type {
   WorkspaceTaskType,
 } from "@/lib/data/workspace-tasks.types";
 import { isLegacyMatchesWithoutIntroColumnsError } from "./supabase-error-guards";
+import {
+  normalizeInternalComments,
+  normalizeInternalTodos,
+} from "./workspace-matches-page";
+import type {
+  PipelineInternalComment,
+  PipelineInternalTodo,
+} from "./workspace-matches-page.types";
 
 export async function getWorkspaceWriteClient(): Promise<SupabaseClient> {
   return tryCreateServiceRoleClient() ?? (await createServerSupabaseClient());
@@ -801,10 +809,12 @@ export type CreatedMatchTransactionRow = {
   outcome: MatchOutcome | null;
   context: string | null;
   notes: string | null;
+  internal_comments: PipelineInternalComment[];
+  internal_todos: PipelineInternalTodo[];
 };
 
 const TX_SELECT =
-  "id,match_id,title,stage,outcome,context,notes";
+  "id,match_id,title,stage,outcome,context,notes,internal_comments,internal_todos";
 
 function parsePipelineTxnStage(raw: unknown): PipelineTransactionStage {
   return raw === "closed" ? "closed" : "active";
@@ -821,6 +831,8 @@ function shapeMatchTransactionRow(
     outcome: parseOutcome(data.outcome),
     context: data.context == null ? null : String(data.context),
     notes: data.notes == null ? null : String(data.notes),
+    internal_comments: normalizeInternalComments(data.internal_comments),
+    internal_todos: normalizeInternalTodos(data.internal_todos),
   };
 }
 
@@ -875,6 +887,8 @@ export async function updateWorkspaceMatchTransaction(
     outcome: MatchOutcome | null;
     context: string | null;
     notes: string | null;
+    internal_comments: PipelineInternalComment[];
+    internal_todos: PipelineInternalTodo[];
   },
 ): Promise<CreatedMatchTransactionRow | null> {
   const outcome = input.stage === "closed" ? input.outcome : null;
@@ -886,6 +900,8 @@ export async function updateWorkspaceMatchTransaction(
       outcome,
       context: input.context,
       notes: input.notes,
+      internal_comments: input.internal_comments,
+      internal_todos: input.internal_todos,
     })
     .eq("id", id)
     .select(TX_SELECT)
@@ -914,6 +930,8 @@ export async function moveWorkspaceMatchTransactionStage(
     outcome: targetOutcome,
     context: current.context,
     notes: current.notes,
+    internal_comments: current.internal_comments,
+    internal_todos: current.internal_todos,
   });
 }
 

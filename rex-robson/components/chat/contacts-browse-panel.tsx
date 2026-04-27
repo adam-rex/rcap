@@ -783,6 +783,7 @@ export function ContactsBrowsePanel({
       open={formOpen}
       title={formMode === "create" ? "New contact" : "Edit contact"}
       onClose={closeForm}
+      variant="fullscreen"
     >
       {contactFormNode}
     </WorkspaceCreateDialog>

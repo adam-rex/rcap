@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
-import {
-  parseMatchTransactionUpsertBody,
-} from "@/lib/api/workspace-entity-bodies";
+import { parseMatchTransactionPatchBody } from "@/lib/api/workspace-entity-bodies";
 import { isValidUuid, readJsonObject } from "@/lib/api/workspace-post-parse";
 import {
   fetchWorkspaceMatchTransactionById,
@@ -10,6 +8,10 @@ import {
 } from "@/lib/data/workspace-mutations";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { tryCreateServiceRoleClient } from "@/lib/supabase/service-role";
+import {
+  normalizeInternalComments,
+  normalizeInternalTodos,
+} from "@/lib/data/workspace-matches-page";
 import type { WorkspacePipelineTransactionRow } from "@/lib/data/workspace-matches-page.types";
 
 export const runtime = "nodejs";
@@ -24,6 +26,8 @@ type RawTxnDetail = {
   outcome: string | null;
   context: string | null;
   notes: string | null;
+  internal_comments?: unknown;
+  internal_todos?: unknown;
   match: {
     contact_a_id: string;
     contact_b_id: string;
@@ -54,6 +58,8 @@ function shapeDetail(raw: RawTxnDetail): WorkspacePipelineTransactionRow | null 
     context: raw.context == null ? null : String(raw.context),
     notes: raw.notes == null ? null : String(raw.notes),
     title: raw.title == null ? null : String(raw.title),
+    internal_comments: normalizeInternalComments(raw.internal_comments),
+    internal_todos: normalizeInternalTodos(raw.internal_todos),
   };
 }
 
@@ -69,7 +75,7 @@ export async function GET(_req: Request, context: RouteContext) {
     const client = service ?? userScoped;
 
     const select =
-      "id,match_id,title,stage,outcome,context,notes," +
+      "id,match_id,title,stage,outcome,context,notes,internal_comments,internal_todos," +
       "match:matches!inner(contact_a_id,contact_b_id,kind," +
       "contact_a:contacts!matches_contact_a_id_fkey(name)," +
       "contact_b:contacts!matches_contact_b_id_fkey(name))";
@@ -104,15 +110,9 @@ export async function PATCH(req: Request, context: RouteContext) {
   if (!parsed.ok) {
     return NextResponse.json({ error: parsed.error }, { status: 400 });
   }
-  const fields = parseMatchTransactionUpsertBody(parsed.body);
+  const fields = parseMatchTransactionPatchBody(parsed.body);
   if (!fields.ok) {
     return NextResponse.json({ error: fields.error }, { status: 400 });
-  }
-  if (fields.value.stage === "closed" && fields.value.outcome == null) {
-    return NextResponse.json(
-      { error: "outcome is required when stage is closed." },
-      { status: 400 },
-    );
   }
 
   try {
@@ -121,12 +121,32 @@ export async function PATCH(req: Request, context: RouteContext) {
     if (!existing) {
       return NextResponse.json({ error: "Transaction not found" }, { status: 404 });
     }
+    const p = fields.value;
+    const nextStage = p.stage !== undefined ? p.stage : existing.stage;
+    const nextOutcome =
+      nextStage === "closed"
+        ? p.outcome !== undefined
+          ? p.outcome
+          : existing.outcome
+        : null;
+    if (nextStage === "closed" && nextOutcome == null) {
+      return NextResponse.json(
+        { error: "outcome is required when stage is closed." },
+        { status: 400 },
+      );
+    }
     const row = await updateWorkspaceMatchTransaction(client, id, {
-      title: fields.value.title,
-      stage: fields.value.stage,
-      outcome: fields.value.outcome,
-      context: fields.value.context,
-      notes: fields.value.notes,
+      title: p.title !== undefined ? p.title : existing.title,
+      stage: nextStage,
+      outcome: nextOutcome,
+      context: p.context !== undefined ? p.context : existing.context,
+      notes: p.notes !== undefined ? p.notes : existing.notes,
+      internal_comments:
+        p.internalComments !== undefined
+          ? p.internalComments
+          : existing.internal_comments,
+      internal_todos:
+        p.internalTodos !== undefined ? p.internalTodos : existing.internal_todos,
     });
     if (!row) {
       return NextResponse.json({ error: "Transaction not found" }, { status: 404 });
