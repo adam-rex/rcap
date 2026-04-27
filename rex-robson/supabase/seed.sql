@@ -18,7 +18,7 @@ insert into public.organisations (id, name, type, description) values
 
 insert into public.contacts (
   id, name, organisation_id, contact_type, role, deal_types, min_deal_size, max_deal_size,
-  sector, sectors, geography, relationship_score, last_contact_date, notes, source
+  sector, sectors, geography, relationship_score, last_contact_date, notes, source, internal_owner
 ) values
   (
     'c1000000-0000-4000-8000-000000000001',
@@ -35,7 +35,8 @@ insert into public.contacts (
     0.82,
     '2026-03-18',
     'Warm intro via portfolio CEO. Interested in vertical SaaS with strong net retention.',
-    'conference'
+    'conference',
+    'James'
   ),
   (
     'c1000000-0000-4000-8000-000000000002',
@@ -52,7 +53,8 @@ insert into public.contacts (
     0.64,
     '2026-02-02',
     'Building a clinical workflow tool for radiology groups; raising Series A.',
-    'linkedin'
+    'linkedin',
+    'Adam'
   ),
   (
     'c1000000-0000-4000-8000-000000000003',
@@ -69,7 +71,8 @@ insert into public.contacts (
     0.91,
     '2026-04-01',
     'Senior debt + unitranche; comfortable financing industrial roll-ups.',
-    'referral'
+    'referral',
+    'Neil'
   ),
   (
     'c1000000-0000-4000-8000-000000000004',
@@ -86,7 +89,8 @@ insert into public.contacts (
     0.77,
     '2026-03-28',
     'Founder of a regional cold-chain operator; exploring growth equity to fund expansion.',
-    'event'
+    'event',
+    'James'
   );
 
 insert into public.matches (

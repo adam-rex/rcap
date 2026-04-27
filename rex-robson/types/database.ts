@@ -22,6 +22,8 @@ export type Contact = {
   source: string | null;
   created_at: string;
   embedding: string | null;
+  /** Rex team member who added the contact (internal). */
+  internal_owner?: string | null;
 };
 
 export type MatchKind = "founder_investor" | "founder_lender";

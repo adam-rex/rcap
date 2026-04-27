@@ -7,7 +7,14 @@ The user just met this person in real life. They are capturing the contact on th
 Rules:
 - Never invent a name, email, phone, or company. If the field is not in the input, leave it blank ("").
 - Prefer short, factual values. Titles in \`role\` (e.g. "Partner", "Head of Credit"). Single sector (e.g. "Fintech", "Real Estate"). Geography as city, region, or country as written.
-- \`contactType\` must be exactly one of: "Founder", "Investor", "Lender", "Other". If you cannot tell, choose "Other" and include "contactType" in \`lowConfidence\`.
+- \`contactType\` must be exactly one of: "Founder", "Investor", "Lender", "Advisor", "Corporate", "Other". Guidance:
+  - "Founder" — starts / runs their own company (founder, co-founder, CEO/owner of their own business).
+  - "Investor" — deploys equity (VC, PE, family office, angel, LP, GP, etc.).
+  - "Lender" — deploys debt/credit (bank, private credit fund, debt provider).
+  - "Advisor" — professional whose clients are founders/investors and can be a source of warm intros (lawyer, accountant, tax advisor, wealth manager, interior designer, consultant). Not an investor themselves.
+  - "Corporate" — senior professional at a very large blue-chip corporation (e.g. MD at a Big Four firm, exec at a FTSE/Fortune 500). Not a founder, not part of a small/mid investment group, not a lender.
+  - "Other" — none of the above, or genuinely unclear.
+  If you cannot tell, choose "Other" and include "contactType" in \`lowConfidence\`.
 - \`notes\` should preserve the user's raw context verbatim-ish (what they said about the person, where they met, what the person is looking for). Keep it short — a few lines at most.
 - \`lowConfidence\` lists any field names you guessed or inferred vs. read literally. Empty array if everything was explicit.
 - \`rexSummary\` is one short first-person sentence as Rex, warm and confident. Examples: "Got Jane from Acme — fintech founder raising a seed.", "That's Marcus at Bridgepoint — mid-market credit, UK focus.".
@@ -22,7 +29,7 @@ The JSON object must use exactly these keys:
 
 {
   "name": string,
-  "contactType": "Founder" | "Investor" | "Lender" | "Other",
+  "contactType": "Founder" | "Investor" | "Lender" | "Advisor" | "Corporate" | "Other",
   "sector": string,
   "organisationName": string,
   "role": string,
@@ -76,7 +83,7 @@ Return the JSON object now.`;
 
 export type QuickCaptureDraft = {
   name: string;
-  contactType: "Founder" | "Investor" | "Lender" | "Other";
+  contactType: "Founder" | "Investor" | "Lender" | "Advisor" | "Corporate" | "Other";
   sector: string;
   organisationName: string;
   role: string;
@@ -88,7 +95,14 @@ export type QuickCaptureDraft = {
   rexSummary: string;
 };
 
-const CONTACT_TYPE_VALUES = ["Founder", "Investor", "Lender", "Other"] as const;
+const CONTACT_TYPE_VALUES = [
+  "Founder",
+  "Investor",
+  "Lender",
+  "Advisor",
+  "Corporate",
+  "Other",
+] as const;
 
 function coerceString(value: unknown): string {
   if (typeof value !== "string") return "";

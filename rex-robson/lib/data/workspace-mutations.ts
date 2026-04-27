@@ -58,6 +58,7 @@ export type CreatedContactRow = {
   phone: string | null;
   email: string | null;
   organisation_id: string | null;
+  internal_owner: string | null;
 };
 
 export async function insertWorkspaceContact(
@@ -72,6 +73,7 @@ export async function insertWorkspaceContact(
     phone: string | null;
     email: string | null;
     notes: string | null;
+    internal_owner: string | null;
   },
 ): Promise<CreatedContactRow> {
   const { data, error } = await client
@@ -86,8 +88,11 @@ export async function insertWorkspaceContact(
       phone: input.phone,
       email: input.email,
       notes: input.notes,
+      internal_owner: input.internal_owner,
     })
-    .select("id,name,contact_type,sector,role,geography,phone,email,organisation_id")
+    .select(
+      "id,name,contact_type,sector,role,geography,phone,email,organisation_id,internal_owner",
+    )
     .single();
 
   if (error) throw error;
@@ -104,6 +109,8 @@ export async function insertWorkspaceContact(
     email: data.email == null ? null : String(data.email),
     organisation_id:
       data.organisation_id == null ? null : String(data.organisation_id),
+    internal_owner:
+      data.internal_owner == null ? null : String(data.internal_owner),
   };
 }
 
@@ -145,6 +152,7 @@ export type WorkspaceContactDetail = {
   phone: string | null;
   email: string | null;
   notes: string | null;
+  internal_owner: string | null;
 };
 
 export async function fetchWorkspaceContactById(
@@ -153,7 +161,9 @@ export async function fetchWorkspaceContactById(
 ): Promise<WorkspaceContactDetail | null> {
   const { data, error } = await client
     .from("contacts")
-    .select("id,name,contact_type,sector,organisation_id,role,geography,phone,email,notes")
+    .select(
+      "id,name,contact_type,sector,organisation_id,role,geography,phone,email,notes,internal_owner",
+    )
     .eq("id", id)
     .maybeSingle();
 
@@ -172,6 +182,8 @@ export async function fetchWorkspaceContactById(
     phone: data.phone == null ? null : String(data.phone),
     email: data.email == null ? null : String(data.email),
     notes: data.notes == null ? null : String(data.notes),
+    internal_owner:
+      data.internal_owner == null ? null : String(data.internal_owner),
   };
 }
 
@@ -203,6 +215,7 @@ export async function updateWorkspaceContact(
     phone: string | null;
     email: string | null;
     notes: string | null;
+    internal_owner: string | null;
   },
 ): Promise<CreatedContactRow | null> {
   const { data, error } = await client
@@ -217,9 +230,12 @@ export async function updateWorkspaceContact(
       phone: input.phone,
       email: input.email,
       notes: input.notes,
+      internal_owner: input.internal_owner,
     })
     .eq("id", id)
-    .select("id,name,contact_type,sector,role,geography,phone,email,organisation_id")
+    .select(
+      "id,name,contact_type,sector,role,geography,phone,email,organisation_id,internal_owner",
+    )
     .maybeSingle();
 
   if (error) throw error;
@@ -236,6 +252,8 @@ export async function updateWorkspaceContact(
     email: data.email == null ? null : String(data.email),
     organisation_id:
       data.organisation_id == null ? null : String(data.organisation_id),
+    internal_owner:
+      data.internal_owner == null ? null : String(data.internal_owner),
   };
 }
 

@@ -173,18 +173,18 @@ const SECTOR_TOP_N = 6;
 const SECTOR_BAR_OPACITIES = [0.9, 0.78, 0.65, 0.52, 0.4, 0.28] as const;
 
 type SectorBreakdownProps = {
-  matchesBySector: SectorBreakdownEntry[];
-  sectorTotalCount: number;
+  contactsBySector: SectorBreakdownEntry[];
+  sectorContactCount: number;
   sectorUnknownCount: number;
 };
 
 function SectorBreakdown({
-  matchesBySector,
-  sectorTotalCount,
+  contactsBySector,
+  sectorContactCount,
   sectorUnknownCount,
 }: SectorBreakdownProps) {
-  const topN = matchesBySector.slice(0, SECTOR_TOP_N);
-  const rest = matchesBySector.slice(SECTOR_TOP_N);
+  const topN = contactsBySector.slice(0, SECTOR_TOP_N);
+  const rest = contactsBySector.slice(SECTOR_TOP_N);
   const restCount = rest.reduce((sum, e) => sum + e.count, 0);
 
   const rows: Array<{
@@ -226,26 +226,27 @@ function SectorBreakdown({
             <PieChart className="size-3.5" strokeWidth={1.75} aria-hidden />
           </span>
           <p className="text-[11px] font-medium uppercase tracking-wide text-charcoal-light/80">
-            Open matches by sector
+            Contacts by sector
           </p>
         </div>
         <p className="text-[11px] text-charcoal-light/70">
-          {formatCount(sectorTotalCount)} open
+          {formatCount(sectorContactCount)} contact
+          {sectorContactCount === 1 ? "" : "s"}
         </p>
       </div>
 
-      {sectorTotalCount === 0 ? (
+      {sectorContactCount === 0 ? (
         <div className="mt-4 rounded-lg border border-dashed border-charcoal/15 bg-cream-light/40 px-4 py-6 text-center">
           <p className="text-xs text-charcoal-light/80">
-            No open matches to break down yet.
+            No contacts to break down yet.
           </p>
         </div>
       ) : (
         <ul className="mt-4 flex flex-col gap-2.5">
           {rows.map((row, index) => {
             const pct =
-              sectorTotalCount > 0
-                ? Math.round((row.count / sectorTotalCount) * 100)
+              sectorContactCount > 0
+                ? Math.round((row.count / sectorContactCount) * 100)
                 : 0;
             const widthPct =
               maxCount > 0 ? Math.max(2, (row.count / maxCount) * 100) : 0;
@@ -273,7 +274,7 @@ function SectorBreakdown({
                 </div>
                 <div
                   className="h-2 w-full overflow-hidden rounded-full bg-charcoal/[0.06]"
-                  aria-label={`${row.label}: ${row.count} match${row.count === 1 ? "" : "es"} (${pct}%)`}
+                  aria-label={`${row.label}: ${row.count} contact${row.count === 1 ? "" : "s"} (${pct}%)`}
                 >
                   <div
                     className="h-full rounded-full bg-charcoal"
@@ -301,8 +302,8 @@ export function DashboardPanel({
     openMatchCount,
     totalPipelineGbp,
     matchesByStage,
-    matchesBySector,
-    sectorTotalCount,
+    contactsBySector,
+    sectorContactCount,
     sectorUnknownCount,
     activeMatchesCount,
     pendingSuggestionsCount,
@@ -374,8 +375,8 @@ export function DashboardPanel({
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <StageBreakdown matchesByStage={matchesByStage} />
         <SectorBreakdown
-          matchesBySector={matchesBySector}
-          sectorTotalCount={sectorTotalCount}
+          contactsBySector={contactsBySector}
+          sectorContactCount={sectorContactCount}
           sectorUnknownCount={sectorUnknownCount}
         />
       </div>

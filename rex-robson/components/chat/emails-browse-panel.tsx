@@ -85,8 +85,12 @@ function fromLine(row: WorkspaceEmailListRow): string {
 
 export function EmailsBrowsePanel({
   mailbox = "emails",
+  initialEmailId = null,
+  onInitialEmailIdHandled,
 }: {
   mailbox?: MailboxMode;
+  initialEmailId?: string | null;
+  onInitialEmailIdHandled?: () => void;
 }) {
   const pageSize = WORKSPACE_EMAILS_PAGE_SIZE_DEFAULT;
   const [queryInput, setQueryInput] = useState("");
@@ -211,6 +215,15 @@ export function EmailsBrowsePanel({
     setSelectedId(id);
     void loadDetail(id);
   };
+
+  useEffect(() => {
+    if (!initialEmailId) return;
+    setSelectedId(initialEmailId);
+    void loadDetail(initialEmailId);
+    onInitialEmailIdHandled?.();
+    // We only respond to a fresh initialEmailId; subsequent navigation away
+    // is intentional and should not re-trigger.
+  }, [initialEmailId, loadDetail, onInitialEmailIdHandled]);
 
   const clearSelection = () => {
     setSelectedId(null);

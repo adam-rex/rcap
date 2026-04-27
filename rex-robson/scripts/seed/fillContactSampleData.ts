@@ -9,9 +9,17 @@
 
 import { parseArgs } from "node:util";
 import { faker } from "@faker-js/faker";
+import { INTERNAL_CONTACT_OWNERS } from "@/lib/constants/internal-contact-owners";
 import { createServiceSupabase } from "./env";
 
-const CONTACT_TYPES = ["Founder", "Investor", "Lender", "Other"] as const;
+const CONTACT_TYPES = [
+  "Founder",
+  "Investor",
+  "Lender",
+  "Advisor",
+  "Corporate",
+  "Other",
+] as const;
 const SECTORS = [
   "Fintech",
   "SaaS",
@@ -71,6 +79,7 @@ type ContactRow = {
   max_deal_size: number | null;
   last_contact_date: string | null;
   source: string | null;
+  internal_owner: string | null;
 };
 
 async function main(): Promise<void> {
@@ -100,7 +109,7 @@ async function main(): Promise<void> {
       const { data, error } = await supabase
         .from("contacts")
         .select(
-          "id,contact_type,sector,phone,email,role,geography,notes,deal_types,sectors,min_deal_size,max_deal_size,last_contact_date,source",
+          "id,contact_type,sector,phone,email,role,geography,notes,deal_types,sectors,min_deal_size,max_deal_size,last_contact_date,source,internal_owner",
         )
         .order("created_at", { ascending: false })
         .range(from, to);
@@ -168,6 +177,9 @@ async function main(): Promise<void> {
         }
         if (isBlank(r.source)) {
           patch.source = "sample_seed";
+        }
+        if (isBlank(r.internal_owner)) {
+          patch.internal_owner = pick(INTERNAL_CONTACT_OWNERS);
         }
 
         if (Object.keys(patch).length === 0) continue;

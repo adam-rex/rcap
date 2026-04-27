@@ -2,6 +2,7 @@
 
 import {
   FileText,
+  Mail,
   Mic,
   MicOff,
   Pencil,
@@ -19,9 +20,10 @@ import {
   type DragEvent,
   type FormEvent,
 } from "react";
-import type { QuickCaptureDraft } from "@/lib/prompts/quick-capture";
+import { INTERNAL_CONTACT_OWNERS } from "@/lib/constants/internal-contact-owners";
 import type { WorkspaceOrganisationPageRow } from "@/lib/data/workspace-organisations-page.types";
 import { WORKSPACE_ORGANISATIONS_PAGE_SIZE_MAX } from "@/lib/data/workspace-organisations-page.types";
+import type { QuickCaptureDraft } from "@/lib/prompts/quick-capture";
 import {
   WORKSPACE_FORM_BTN_PRIMARY,
   WORKSPACE_FORM_BTN_SECONDARY,
@@ -30,21 +32,44 @@ import {
   WorkspaceCreateDialog,
 } from "./workspace-create-dialog";
 
-const CONTACT_TYPE_OPTIONS = ["Founder", "Investor", "Lender", "Other"] as const;
+const CONTACT_TYPE_OPTIONS = [
+  "Founder",
+  "Investor",
+  "Lender",
+  "Advisor",
+  "Corporate",
+  "Other",
+] as const;
 
 const UPLOAD_ACCEPT =
   "image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp,.gif,application/pdf,.pdf";
 
+const EMAIL_UPLOAD_ACCEPT = ".eml,message/rfc822";
+
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
+const MAX_EML_BYTES = 25 * 1024 * 1024;
 
 const MAX_VOICE_SECONDS = 120;
 
 const ORG_NEW_VALUE = "__new__";
 const ORG_NONE_VALUE = "";
 
-type Mode = "text" | "voice" | "upload";
+type Mode = "text" | "voice" | "upload" | "email";
 
-type Phase = "compose" | "extracting" | "review" | "saving" | "saved";
+type Phase =
+  | "compose"
+  | "extracting"
+  | "review"
+  | "saving"
+  | "saved"
+  | "email_saved";
+
+type EmailIngestSummary = {
+  emailId: string;
+  extractionsCount: number;
+  attachmentsCount: number;
+  dedup: boolean;
+};
 
 export type QuickCaptureMatchRow = {
   suggestionId: string | null;
@@ -67,12 +92,14 @@ type QuickCaptureDialogProps = {
   onClose: () => void;
   onCaptured?: (success: QuickCaptureSuccess) => void;
   onOpenSuggestions?: () => void;
+  onOpenEmail?: (emailId: string) => void;
 };
 
 type ReviewForm = {
   name: string;
   contactType: string;
   sector: string;
+  internalOwner: string;
   organisationChoice: string;
   inlineOrgName: string;
   inlineOrgType: string;
@@ -91,6 +118,7 @@ function emptyForm(): ReviewForm {
     name: "",
     contactType: "",
     sector: "",
+    internalOwner: INTERNAL_CONTACT_OWNERS[0],
     organisationChoice: ORG_NONE_VALUE,
     inlineOrgName: "",
     inlineOrgType: "",
@@ -134,6 +162,7 @@ export function QuickCaptureDialog({
   onClose,
   onCaptured,
   onOpenSuggestions,
+  onOpenEmail,
 }: QuickCaptureDialogProps) {
   const [mode, setMode] = useState<Mode>("text");
   const [phase, setPhase] = useState<Phase>("compose");
@@ -145,6 +174,13 @@ export function QuickCaptureDialog({
   const [dragActive, setDragActive] = useState(false);
   const uploadInputId = useId();
   const uploadInputRef = useRef<HTMLInputElement>(null);
+
+  const [emlFile, setEmlFile] = useState<File | null>(null);
+  const [emailRawText, setEmailRawText] = useState("");
+  const [emailDragActive, setEmailDragActive] = useState(false);
+  const emailInputId = useId();
+  const emailInputRef = useRef<HTMLInputElement>(null);
+  const [emailIngest, setEmailIngest] = useState<EmailIngestSummary | null>(null);
 
   const [recordingState, setRecordingState] = useState<
     "idle" | "recording" | "stopped" | "transcribing"
@@ -189,6 +225,11 @@ export function QuickCaptureDialog({
     setRecordingSeconds(0);
     setForm(emptyForm());
     setSaved(null);
+    setEmlFile(null);
+    setEmailRawText("");
+    setEmailDragActive(false);
+    setEmailIngest(null);
+    if (emailInputRef.current) emailInputRef.current.value = "";
     releaseRecorder();
   }, [releaseRecorder]);
 
@@ -242,6 +283,7 @@ export function QuickCaptureDialog({
         name: draft.name,
         contactType: draft.contactType || "",
         sector: draft.sector,
+        internalOwner: INTERNAL_CONTACT_OWNERS[0],
         organisationChoice: matchedOrg
           ? matchedOrg.id
           : draft.organisationName
@@ -379,6 +421,97 @@ export function QuickCaptureDialog({
   const removeUploadFile = useCallback((index: number) => {
     setUploadFiles((prev) => prev.filter((_, i) => i !== index));
   }, []);
+
+  const acceptEmlFile = useCallback((list: FileList | null) => {
+    if (!list?.length) return;
+    const f = list.item(0);
+    if (!f) return;
+    const lower = f.name.toLowerCase();
+    const ok =
+      lower.endsWith(".eml") ||
+      f.type === "message/rfc822" ||
+      f.type === "application/octet-stream";
+    if (!ok) {
+      setError(`Unsupported file: ${f.name}. Drop a .eml export.`);
+      return;
+    }
+    if (f.size > MAX_EML_BYTES) {
+      setError(`${f.name} is too large (limit 25 MB).`);
+      return;
+    }
+    setError(null);
+    setEmlFile(f);
+    if (emailInputRef.current) emailInputRef.current.value = "";
+  }, []);
+
+  const onEmailDrop = useCallback(
+    (e: DragEvent) => {
+      e.preventDefault();
+      setEmailDragActive(false);
+      acceptEmlFile(e.dataTransfer.files);
+    },
+    [acceptEmlFile],
+  );
+
+  const submitEmailIngest = useCallback(async () => {
+    setPhase("extracting");
+    setError(null);
+    try {
+      let res: Response;
+      if (emlFile) {
+        const fd = new FormData();
+        fd.append("eml", emlFile, emlFile.name);
+        res = await fetch("/api/rex/email/ingest", { method: "POST", body: fd });
+      } else {
+        const trimmed = emailRawText.trim();
+        if (!trimmed) {
+          setPhase("compose");
+          setError("Drop a .eml file or paste a forwarded email first.");
+          return;
+        }
+        res = await fetch("/api/rex/email/ingest", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rawText: trimmed }),
+        });
+      }
+      const data = (await res.json()) as {
+        ok?: boolean;
+        emailId?: string;
+        extractionsCount?: number;
+        attachmentsCount?: number;
+        dedup?: boolean;
+        error?: string;
+      };
+      if (!res.ok || !data.emailId) {
+        setPhase("compose");
+        setError(data.error ?? "Rex couldn't read that email. Try again.");
+        return;
+      }
+      setEmailIngest({
+        emailId: data.emailId,
+        extractionsCount: data.extractionsCount ?? 0,
+        attachmentsCount: data.attachmentsCount ?? 0,
+        dedup: !!data.dedup,
+      });
+      setPhase("email_saved");
+    } catch {
+      setPhase("compose");
+      setError("Network error while ingesting email.");
+    }
+  }, [emlFile, emailRawText]);
+
+  const onSubmitEmail = useCallback(
+    async (e: FormEvent) => {
+      e.preventDefault();
+      if (!emlFile && emailRawText.trim().length < 10) {
+        setError("Drop a .eml file or paste the forwarded email body.");
+        return;
+      }
+      await submitEmailIngest();
+    },
+    [emlFile, emailRawText, submitEmailIngest],
+  );
 
   const startRecording = useCallback(async () => {
     setError(null);
@@ -577,6 +710,7 @@ export function QuickCaptureDialog({
             phone: form.phone.trim() === "" ? null : form.phone.trim(),
             email: form.email.trim() === "" ? null : form.email.trim(),
             notes: form.notes.trim() === "" ? null : form.notes.trim(),
+            internalOwner: form.internalOwner,
           }),
         });
         const data = (await res.json()) as {
@@ -632,9 +766,11 @@ export function QuickCaptureDialog({
   const headerTitle =
     phase === "saved"
       ? "Saved"
-      : phase === "review"
-        ? "Review & save"
-        : "Quick Capture";
+      : phase === "email_saved"
+        ? "Email captured"
+        : phase === "review"
+          ? "Review & save"
+          : "Quick Capture";
 
   return (
     <WorkspaceCreateDialog open={open} title={headerTitle} onClose={onClose}>
@@ -893,6 +1029,126 @@ export function QuickCaptureDialog({
               </div>
             </form>
           ) : null}
+
+          {mode === "email" ? (
+            <form onSubmit={onSubmitEmail} className="mt-4 space-y-3">
+              <p className="text-xs text-charcoal-light/80">
+                Drop a saved <span className="font-mono">.eml</span> file (forward
+                the email to yourself, then save it from your mail client) or paste
+                the raw forwarded text. Rex picks out the people, orgs, and any
+                intro asks for you to review.
+              </p>
+              <label
+                htmlFor={emailInputId}
+                onDragEnter={(e) => {
+                  e.preventDefault();
+                  setEmailDragActive(true);
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setEmailDragActive(true);
+                }}
+                onDragLeave={() => setEmailDragActive(false)}
+                onDrop={onEmailDrop}
+                className={
+                  "flex cursor-pointer flex-col items-center rounded-xl border-2 border-dashed px-6 py-7 text-center transition-colors " +
+                  (emailDragActive
+                    ? "border-charcoal/35 bg-charcoal/[0.04]"
+                    : "border-charcoal/20 bg-cream/80 hover:border-charcoal/30")
+                }
+              >
+                <Mail
+                  className="size-8 text-charcoal-light/70"
+                  strokeWidth={1.5}
+                  aria-hidden
+                />
+                <span className="mt-3 text-sm font-semibold text-charcoal">
+                  Drop a .eml file
+                </span>
+                <span className="mt-1 text-xs text-charcoal-light">
+                  Up to 25 MB. Includes attachments.
+                </span>
+                <input
+                  ref={emailInputRef}
+                  id={emailInputId}
+                  type="file"
+                  accept={EMAIL_UPLOAD_ACCEPT}
+                  className="sr-only"
+                  onChange={(e) => acceptEmlFile(e.target.files)}
+                />
+              </label>
+
+              {emlFile ? (
+                <div className="flex items-center gap-2 rounded-lg border border-charcoal/10 bg-cream-light/40 px-3 py-2">
+                  <FileText
+                    className="size-4 shrink-0 text-charcoal-light"
+                    aria-hidden
+                  />
+                  <span className="min-w-0 flex-1 truncate text-sm text-charcoal">
+                    {emlFile.name}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEmlFile(null);
+                      if (emailInputRef.current) {
+                        emailInputRef.current.value = "";
+                      }
+                    }}
+                    className="flex size-6 items-center justify-center rounded-full text-charcoal-light hover:bg-charcoal/10 hover:text-charcoal"
+                    aria-label={`Remove ${emlFile.name}`}
+                  >
+                    <X className="size-3.5" aria-hidden />
+                  </button>
+                </div>
+              ) : null}
+
+              <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide text-charcoal-light/70">
+                <span className="h-px flex-1 bg-charcoal/10" />
+                or paste raw email
+                <span className="h-px flex-1 bg-charcoal/10" />
+              </div>
+
+              <label className="sr-only" htmlFor="qc-email-raw">
+                Paste forwarded email
+              </label>
+              <textarea
+                id="qc-email-raw"
+                value={emailRawText}
+                onChange={(e) => setEmailRawText(e.target.value)}
+                rows={6}
+                placeholder="From: jane@acme.io\nSubject: Intro to our portfolio\n\nHi Rex, meet Jane — she runs Acme..."
+                className={`${WORKSPACE_FORM_INPUT_CLASS} resize-y font-mono text-[13px] leading-relaxed`}
+                disabled={!!emlFile}
+              />
+
+              {error ? (
+                <p className="text-sm text-red-700/90" role="alert">
+                  {error}
+                </p>
+              ) : null}
+
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className={WORKSPACE_FORM_BTN_SECONDARY}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className={WORKSPACE_FORM_BTN_PRIMARY}
+                  disabled={!emlFile && emailRawText.trim().length < 10}
+                >
+                  <span className="inline-flex items-center gap-1.5">
+                    <Sparkles className="size-3.5" aria-hidden />
+                    Hand to Rex
+                  </span>
+                </button>
+              </div>
+            </form>
+          ) : null}
         </div>
       ) : null}
 
@@ -925,7 +1181,104 @@ export function QuickCaptureDialog({
           onCaptureAnother={resetAll}
         />
       ) : null}
+
+      {phase === "email_saved" && emailIngest ? (
+        <EmailSavedState
+          summary={emailIngest}
+          onClose={onClose}
+          onCaptureAnother={resetAll}
+          onOpenEmail={onOpenEmail}
+        />
+      ) : null}
     </WorkspaceCreateDialog>
+  );
+}
+
+type EmailSavedStateProps = {
+  summary: EmailIngestSummary;
+  onClose: () => void;
+  onCaptureAnother: () => void;
+  onOpenEmail?: (emailId: string) => void;
+};
+
+function EmailSavedState({
+  summary,
+  onClose,
+  onCaptureAnother,
+  onOpenEmail,
+}: EmailSavedStateProps) {
+  const headline = summary.dedup
+    ? "Already in Rex's inbox."
+    : summary.extractionsCount > 0
+      ? `Rex pulled ${summary.extractionsCount} ${
+          summary.extractionsCount === 1 ? "item" : "items"
+        } to review.`
+      : "Email saved. Rex didn't find anything to extract.";
+
+  return (
+    <div className="flex flex-col gap-4 p-4 sm:p-5">
+      <div className="rounded-xl border border-charcoal/10 bg-emerald-50/60 p-3">
+        <p className="text-sm text-charcoal">
+          <span className="font-semibold">{headline}</span>
+        </p>
+        {!summary.dedup && summary.attachmentsCount > 0 ? (
+          <p className="mt-1 text-xs text-charcoal-light">
+            Stored {summary.attachmentsCount}{" "}
+            {summary.attachmentsCount === 1 ? "attachment" : "attachments"}.
+          </p>
+        ) : null}
+      </div>
+
+      {!summary.dedup && summary.extractionsCount > 0 ? (
+        <p className="text-xs text-charcoal-light/80">
+          Open the email in Rex&rsquo;s inbox to confirm the contacts and orgs.
+          Each one becomes a real workspace record once you click apply.
+        </p>
+      ) : null}
+
+      <div className="flex items-center justify-between gap-2 pt-1">
+        <button
+          type="button"
+          onClick={onCaptureAnother}
+          className={WORKSPACE_FORM_BTN_SECONDARY}
+        >
+          Capture another
+        </button>
+        {onOpenEmail ? (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className={WORKSPACE_FORM_BTN_SECONDARY}
+            >
+              Done
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                onOpenEmail(summary.emailId);
+                onClose();
+              }}
+              className={WORKSPACE_FORM_BTN_PRIMARY}
+            >
+              {summary.dedup
+                ? "Open email"
+                : summary.extractionsCount > 0
+                  ? "Review extractions"
+                  : "Open email"}
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={onClose}
+            className={WORKSPACE_FORM_BTN_PRIMARY}
+          >
+            Done
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -969,6 +1322,15 @@ function ModeTabs({ active, onChange }: ModeTabsProps) {
         className={`${base} ${active === "upload" ? "bg-cream text-charcoal shadow-sm" : "text-charcoal-light hover:text-charcoal"}`}
       >
         <Upload className="size-3.5" aria-hidden /> Upload
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={active === "email"}
+        onClick={() => onChange("email")}
+        className={`${base} ${active === "email" ? "bg-cream text-charcoal shadow-sm" : "text-charcoal-light hover:text-charcoal"}`}
+      >
+        <Mail className="size-3.5" aria-hidden /> Email
       </button>
     </div>
   );
@@ -1091,6 +1453,30 @@ function ReviewStep({
           className={fieldClass("sector")}
           placeholder="e.g. Fintech"
         />
+      </div>
+
+      <div>
+        <label htmlFor="qc-internal-owner" className={WORKSPACE_FORM_LABEL_CLASS}>
+          Rex team (internal)
+        </label>
+        <select
+          id="qc-internal-owner"
+          required
+          value={form.internalOwner}
+          onChange={(e) =>
+            setForm((p) => ({ ...p, internalOwner: e.target.value }))
+          }
+          className={WORKSPACE_FORM_INPUT_CLASS}
+        >
+          {INTERNAL_CONTACT_OWNERS.map((name) => (
+            <option key={name} value={name}>
+              {name}
+            </option>
+          ))}
+        </select>
+        <p className="mt-1 text-[11px] text-charcoal-light/80">
+          Who is adding this contact — for your team only.
+        </p>
       </div>
 
       <div>

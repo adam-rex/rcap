@@ -5,8 +5,6 @@ export type MatchesByStage = Record<MatchStage, number>;
 export type SectorBreakdownEntry = {
   sector: string;
   count: number;
-  /** Reserved for future per-sector value math; kept for chart compatibility. */
-  value: number;
 };
 
 export type DashboardMetrics = {
@@ -21,8 +19,15 @@ export type DashboardMetrics = {
    */
   totalPipelineGbp: number;
   matchesByStage: MatchesByStage;
-  matchesBySector: SectorBreakdownEntry[];
-  sectorTotalCount: number;
+  /**
+   * Sector distribution across *all* contacts in the workspace (not just
+   * contacts tied to open matches). The entry list is sorted by descending
+   * count; the dashboard slices the top N and groups the rest into "Other".
+   */
+  contactsBySector: SectorBreakdownEntry[];
+  /** Count of contacts considered in the sector breakdown (entire contact pool). */
+  sectorContactCount: number;
+  /** Contacts with no sector recorded. Shown as "Unspecified" in the chart. */
   sectorUnknownCount: number;
   /** stage='active' tile. */
   activeMatchesCount: number;
@@ -42,8 +47,8 @@ export const ZERO_DASHBOARD_METRICS: DashboardMetrics = {
   openMatchCount: 0,
   totalPipelineGbp: 0,
   matchesByStage: { ...ZERO_MATCHES_BY_STAGE },
-  matchesBySector: [],
-  sectorTotalCount: 0,
+  contactsBySector: [],
+  sectorContactCount: 0,
   sectorUnknownCount: 0,
   activeMatchesCount: 0,
   pendingSuggestionsCount: 0,

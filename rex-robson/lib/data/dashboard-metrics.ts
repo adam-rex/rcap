@@ -34,17 +34,22 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
       .select("*", { count: "exact", head: true })
       .gte("created_at", thirtyDaysAgoIso);
 
-    // For sector breakdown we join on contact_a so each match contributes one
-    // sector (the founder side, by convention). We also pull min/max deal size
-    // from both sides so we can derive an implied per-match deal value for the
-    // total pipeline tile.
+    // Matches drive stage counts + the total pipeline tile. We pull min/max
+    // deal size from both sides so we can derive an implied per-match deal
+    // value. Sector breakdown is no longer derived from matches — see the
+    // separate contacts-sector query below.
     const matchRowsReq = client
       .from("matches")
       .select(
         "stage," +
-          "contact_a:contacts!matches_contact_a_id_fkey(sector,min_deal_size,max_deal_size)," +
+          "contact_a:contacts!matches_contact_a_id_fkey(min_deal_size,max_deal_size)," +
           "contact_b:contacts!matches_contact_b_id_fkey(min_deal_size,max_deal_size)",
       );
+
+    // Sector breakdown aggregates across the entire contact pool. This is
+    // more useful than scoping to open matches: it tells you where your
+    // network sits, not just where live deals are today.
+    const contactSectorsReq = client.from("contacts").select("sector");
 
     const suggestionsPendingReq = client
       .from("suggestions")
@@ -55,11 +60,13 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
       { count: contactCount, error: e1 },
       { count: contactsNew30d, error: e2 },
       { data: matchRows, error: e3 },
-      { count: suggestionsPendingCount, error: e4 },
+      { data: contactSectorRows, error: e4 },
+      { count: suggestionsPendingCount, error: e5 },
     ] = await Promise.all([
       contactsTotalReq,
       contactsNew30dReq,
       matchRowsReq,
+      contactSectorsReq,
       suggestionsPendingReq,
     ]);
 
@@ -67,20 +74,17 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
     if (e2) throw e2;
     if (e3) throw e3;
     if (e4) throw e4;
+    if (e5) throw e5;
 
     const matchesByStage: MatchesByStage = { ...ZERO_MATCHES_BY_STAGE };
     let activeMatchesCount = 0;
     let totalPipelineGbp = 0;
-    const sectorAgg = new Map<string, { count: number; value: number }>();
-    let sectorUnknownCount = 0;
-    let sectorTotalCount = 0;
 
     for (const raw of matchRows ?? []) {
       const row = raw as unknown as {
         stage: string | null;
         contact_a:
           | {
-              sector: string | null;
               min_deal_size: number | null;
               max_deal_size: number | null;
             }
@@ -98,31 +102,30 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
         if (stage === "active") activeMatchesCount += 1;
       }
 
-      // Sector breakdown is scoped to open matches (introduced + active) so the chart
-      // shows where live opportunity sits today.
-      const isOpen = stage !== "closed";
-      if (!isOpen) continue;
+      if (stage !== "closed") {
+        totalPipelineGbp += impliedMatchValueGbp(row.contact_a, row.contact_b);
+      }
+    }
 
-      totalPipelineGbp += impliedMatchValueGbp(row.contact_a, row.contact_b);
+    const sectorAgg = new Map<string, number>();
+    let sectorUnknownCount = 0;
+    let sectorContactCount = 0;
 
-      sectorTotalCount += 1;
-      const sectorName = (row.contact_a?.sector ?? "").trim();
+    for (const raw of contactSectorRows ?? []) {
+      const row = raw as unknown as { sector: string | null };
+      sectorContactCount += 1;
+      const sectorName = (row.sector ?? "").trim();
       if (!sectorName) {
         sectorUnknownCount += 1;
         continue;
       }
-      const existing = sectorAgg.get(sectorName);
-      if (existing) {
-        existing.count += 1;
-      } else {
-        sectorAgg.set(sectorName, { count: 1, value: 0 });
-      }
+      sectorAgg.set(sectorName, (sectorAgg.get(sectorName) ?? 0) + 1);
     }
 
-    const matchesBySector: SectorBreakdownEntry[] = Array.from(
+    const contactsBySector: SectorBreakdownEntry[] = Array.from(
       sectorAgg.entries(),
     )
-      .map(([sector, { count, value }]) => ({ sector, count, value }))
+      .map(([sector, count]) => ({ sector, count }))
       .sort((a, b) => b.count - a.count);
 
     const openMatchCount =
@@ -134,8 +137,8 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
       openMatchCount,
       totalPipelineGbp,
       matchesByStage,
-      matchesBySector,
-      sectorTotalCount,
+      contactsBySector,
+      sectorContactCount,
       sectorUnknownCount,
       activeMatchesCount,
       pendingSuggestionsCount: suggestionsPendingCount ?? 0,

@@ -19,14 +19,16 @@
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.103.0",
     "lucide-react": "^0.544.0",
+    "mailparser": "^3.9.8",
     "next": "16.2.3",
-    "react-markdown": "^10.1.0",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "react-markdown": "^10.1.0"
   },
   "devDependencies": {
     "@faker-js/faker": "^10.4.0",
     "@tailwindcss/postcss": "^4",
+    "@types/mailparser": "^3.4.6",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

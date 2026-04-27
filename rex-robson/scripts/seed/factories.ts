@@ -1,5 +1,6 @@
 import { faker } from "@faker-js/faker";
 import { randomUUID } from "node:crypto";
+import { INTERNAL_CONTACT_OWNERS } from "@/lib/constants/internal-contact-owners";
 
 const ORG_TYPES = [
   "fund",
@@ -55,6 +56,8 @@ const CONTACT_TYPES = [
   "Founder",
   "Investor",
   "Lender",
+  "Advisor",
+  "Corporate",
 ] as const;
 
 const MATCH_OUTCOMES = ["won", "lost", "passed"] as const;
@@ -97,6 +100,7 @@ export type ContactRow = {
   last_contact_date: string;
   notes: string;
   source: string;
+  internal_owner: (typeof INTERNAL_CONTACT_OWNERS)[number];
 };
 
 export type MatchRow = {
@@ -213,6 +217,7 @@ export function createContacts(
         .slice(0, 10),
       notes: faker.lorem.sentence({ min: 8, max: 24 }),
       source: pickOne(SOURCES),
+      internal_owner: pickOne(INTERNAL_CONTACT_OWNERS),
     });
   }
   return rows;

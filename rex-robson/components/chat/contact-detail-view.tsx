@@ -3,6 +3,7 @@
 import {
   ArrowLeft,
   Building2,
+  Download,
   FileText,
   Globe2,
   Mail,
@@ -12,9 +13,11 @@ import {
   Plus,
   Tag,
   Trash2,
+  Upload,
   UserCircle2,
+  X,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { WorkspaceContactPageRow } from "@/lib/data/workspace-contacts.types";
 
 type ContactDetail = {
@@ -23,6 +26,30 @@ type ContactDetail = {
   notes: string | null;
   organisationId: string | null;
 };
+
+type ContactDocument = {
+  id: string;
+  filename: string;
+  contentType: string | null;
+  sizeBytes: number | null;
+  createdAt: string;
+};
+
+type ContactDocumentApiRow = {
+  id: string;
+  filename: string;
+  content_type: string | null;
+  size_bytes: number | null;
+  created_at: string;
+};
+
+function formatBytes(n: number | null): string {
+  if (n == null || !Number.isFinite(n) || n <= 0) return "";
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
 
 type ContactDetailViewProps = {
   contact: WorkspaceContactPageRow;
@@ -102,6 +129,125 @@ export function ContactDetailView({
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [documents, setDocuments] = useState<ContactDocument[]>([]);
+  const [docsLoading, setDocsLoading] = useState(true);
+  const [docsError, setDocsError] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [removingDocId, setRemovingDocId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const loadDocuments = async (signal?: AbortSignal) => {
+    setDocsLoading(true);
+    setDocsError(null);
+    try {
+      const res = await fetch(`/api/workspace/contacts/${contact.id}/documents`, {
+        signal,
+      });
+      const data = (await res.json()) as {
+        rows?: ContactDocumentApiRow[];
+        error?: string;
+        hint?: string;
+      };
+      if (signal?.aborted) return;
+      if (!res.ok) {
+        const parts = [data.error, data.hint].filter(
+          (x): x is string => typeof x === "string" && x.length > 0,
+        );
+        setDocsError(
+          parts.length > 0 ? parts.join(" ") : "Could not load documents.",
+        );
+        setDocuments([]);
+        return;
+      }
+      const rows = data.rows ?? [];
+      setDocuments(
+        rows.map((r) => ({
+          id: r.id,
+          filename: r.filename,
+          contentType: r.content_type,
+          sizeBytes: r.size_bytes,
+          createdAt: r.created_at,
+        })),
+      );
+    } catch (err) {
+      if ((err as { name?: string })?.name === "AbortError") return;
+      setDocsError("Network error while loading documents.");
+      setDocuments([]);
+    } finally {
+      if (!signal?.aborted) setDocsLoading(false);
+    }
+  };
+
+  const handleUploadClick = () => {
+    if (uploading) return;
+    setUploadError(null);
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    event.target.value = "";
+    if (!file) return;
+    setUploading(true);
+    setUploadError(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file, file.name);
+      const res = await fetch(
+        `/api/workspace/contacts/${contact.id}/documents`,
+        {
+          method: "POST",
+          body: fd,
+        },
+      );
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        hint?: string;
+      };
+      if (!res.ok) {
+        const parts = [data.error, data.hint].filter(
+          (x): x is string => typeof x === "string" && x.length > 0,
+        );
+        setUploadError(
+          parts.length > 0 ? parts.join(" ") : "Upload failed.",
+        );
+        return;
+      }
+      await loadDocuments();
+    } catch {
+      setUploadError("Network error while uploading.");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleRemoveDocument = async (documentId: string) => {
+    if (removingDocId) return;
+    const target = documents.find((d) => d.id === documentId);
+    const confirmed = window.confirm(
+      `Remove ${target?.filename ?? "this document"}?`,
+    );
+    if (!confirmed) return;
+    setRemovingDocId(documentId);
+    setUploadError(null);
+    try {
+      const res = await fetch(
+        `/api/workspace/contacts/${contact.id}/documents/${documentId}`,
+        { method: "DELETE" },
+      );
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        setUploadError(data.error ?? "Could not remove document.");
+        return;
+      }
+      setDocuments((prev) => prev.filter((d) => d.id !== documentId));
+    } catch {
+      setUploadError("Network error while removing document.");
+    } finally {
+      setRemovingDocId(null);
+    }
+  };
 
   const handleDelete = async () => {
     if (deleting) return;
@@ -173,6 +319,15 @@ export function ContactDetailView({
     return () => {
       cancelled = true;
     };
+  }, [contact.id, refreshTick]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void loadDocuments(controller.signal);
+    return () => {
+      controller.abort();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contact.id, refreshTick]);
 
   const subline = [contact.role, contact.organisation_name, contact.geography]
@@ -269,6 +424,13 @@ export function ContactDetailView({
           />
           <InfoRow
             icon={
+              <UserCircle2 className="size-3.5" strokeWidth={1.75} aria-hidden />
+            }
+            label="Rex team (internal)"
+            value={contact.internal_owner}
+          />
+          <InfoRow
+            icon={
               <Building2 className="size-3.5" strokeWidth={1.75} aria-hidden />
             }
             label="Organisation"
@@ -334,22 +496,117 @@ export function ContactDetailView({
       </section>
 
       <section className="mt-6">
-        <h3 className="text-[11px] font-bold uppercase tracking-wider text-charcoal-light">
-          Supporting documents
-        </h3>
-        <div className="mt-3 flex items-start gap-3 rounded-xl border border-dashed border-charcoal/15 bg-cream-light/30 p-4">
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-charcoal/[0.06] text-charcoal-light">
-            <FileText className="size-4" strokeWidth={1.5} aria-hidden />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-charcoal">
-              No documents yet
-            </p>
-            <p className="mt-1 text-xs text-charcoal-light/80">
-              Attach PDFs or notes from Ask Rex to build this contact&rsquo;s file.
-              Document linking per contact is coming soon.
-            </p>
-          </div>
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-[11px] font-bold uppercase tracking-wider text-charcoal-light">
+            Supporting documents
+          </h3>
+          <button
+            type="button"
+            onClick={handleUploadClick}
+            disabled={uploading}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-charcoal/15 bg-cream px-3 py-1.5 text-xs font-medium text-charcoal transition-colors hover:bg-cream-light disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Upload className="size-3.5" strokeWidth={1.75} aria-hidden />
+            {uploading ? "Uploading…" : "Add document"}
+          </button>
+        </div>
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          className="hidden"
+          onChange={(e) => void handleFileChange(e)}
+        />
+
+        {uploadError ? (
+          <p className="mt-2 text-xs text-red-700/90" role="alert">
+            {uploadError}
+          </p>
+        ) : null}
+        {docsError ? (
+          <p className="mt-2 text-xs text-red-700/90" role="alert">
+            {docsError}
+          </p>
+        ) : null}
+
+        <div className="mt-3">
+          {docsLoading ? (
+            <div className="flex items-start gap-3 rounded-xl border border-dashed border-charcoal/15 bg-cream-light/30 p-4">
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-charcoal/[0.06] text-charcoal-light">
+                <FileText className="size-4" strokeWidth={1.5} aria-hidden />
+              </span>
+              <p className="text-sm text-charcoal-light/70">Loading documents…</p>
+            </div>
+          ) : documents.length === 0 ? (
+            <div className="flex items-start gap-3 rounded-xl border border-dashed border-charcoal/15 bg-cream-light/30 p-4">
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-charcoal/[0.06] text-charcoal-light">
+                <FileText className="size-4" strokeWidth={1.5} aria-hidden />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-charcoal">
+                  No documents yet
+                </p>
+                <p className="mt-1 text-xs text-charcoal-light/80">
+                  Attach PDFs, decks, or term sheets to build this contact&rsquo;s
+                  file.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <ul className="flex flex-col gap-2">
+              {documents.map((doc) => {
+                const meta = [formatBytes(doc.sizeBytes), formatDate(doc.createdAt)]
+                  .filter((x) => x.length > 0 && x !== "—")
+                  .join(" · ");
+                const removing = removingDocId === doc.id;
+                return (
+                  <li
+                    key={doc.id}
+                    className="flex items-center gap-3 rounded-xl border border-charcoal/[0.08] bg-cream-light/40 px-4 py-3"
+                  >
+                    <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-charcoal/[0.06] text-charcoal-light">
+                      <FileText className="size-4" strokeWidth={1.5} aria-hidden />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <a
+                        href={`/api/workspace/contacts/${contact.id}/documents/${doc.id}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block truncate text-sm font-medium text-charcoal underline-offset-2 hover:underline"
+                      >
+                        {doc.filename}
+                      </a>
+                      {meta ? (
+                        <p className="mt-0.5 truncate text-xs text-charcoal-light/80">
+                          {meta}
+                        </p>
+                      ) : null}
+                    </div>
+                    <a
+                      href={`/api/workspace/contacts/${contact.id}/documents/${doc.id}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-charcoal-light transition-colors hover:bg-charcoal/5 hover:text-charcoal"
+                      aria-label={`Download ${doc.filename}`}
+                      title="Download"
+                    >
+                      <Download className="size-4" strokeWidth={1.75} aria-hidden />
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => void handleRemoveDocument(doc.id)}
+                      disabled={removing}
+                      className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-charcoal-light transition-colors hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                      aria-label={`Remove ${doc.filename}`}
+                      title="Remove"
+                    >
+                      <X className="size-4" strokeWidth={1.75} aria-hidden />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
       </section>
     </div>

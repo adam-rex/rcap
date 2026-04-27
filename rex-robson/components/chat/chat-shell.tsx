@@ -10,9 +10,18 @@ import type { WorkspaceLists } from "@/lib/data/workspace-lists";
 import type { RexDashboardStats } from "@/lib/rex/voice";
 import { ChatComposer } from "./chat-composer";
 import { ChatMessageList, type ChatMessage } from "./chat-message-list";
-import { ChatSidebar, type ChatNavId, type WorkspaceDisplayMode } from "./chat-sidebar";
+import {
+  chatNavLabel,
+  MOBILE_SHELL_BOTTOM_PAD_CLASS,
+  workspaceModeButtonClass,
+  type ChatNavId,
+  type WorkspaceDisplayMode,
+} from "./chat-nav-config";
+import { ChatMobileNav } from "./chat-mobile-nav";
+import { ChatSidebar } from "./chat-sidebar";
 import { ContactsBrowsePanel } from "./contacts-browse-panel";
 import { DashboardPanel } from "./dashboard-panel";
+import { EmailsBrowsePanel } from "./emails-browse-panel";
 import { OrganisationsBrowsePanel } from "./organisations-browse-panel";
 import { PipelinePanel } from "./pipeline-panel";
 import { QuickCaptureDialog } from "./quick-capture-dialog";
@@ -59,6 +68,9 @@ export function ChatShell({
   const [pendingContactsAutoCreate, setPendingContactsAutoCreate] =
     useState(false);
   const [quickCaptureOpen, setQuickCaptureOpen] = useState(false);
+  const [pendingEmailDetailId, setPendingEmailDetailId] = useState<string | null>(
+    null,
+  );
   const router = useRouter();
 
   const onAddContactFromDashboard = useCallback(() => {
@@ -84,6 +96,15 @@ export function ChatShell({
 
   const onOpenSuggestionsFromCapture = useCallback(() => {
     setActiveNav("suggestions");
+  }, []);
+
+  const onOpenEmailFromCapture = useCallback((emailId: string) => {
+    setPendingEmailDetailId(emailId);
+    setActiveNav("emails");
+  }, []);
+
+  const onPendingEmailDetailHandled = useCallback(() => {
+    setPendingEmailDetailId(null);
   }, []);
 
   useEffect(() => {
@@ -193,15 +214,17 @@ export function ChatShell({
   }, []);
 
   return (
-    <div className="flex h-dvh max-h-dvh flex-1 overflow-hidden bg-cream">
+    <div className="flex h-dvh max-h-dvh flex-1 overflow-hidden bg-cream pt-[env(safe-area-inset-top,0px)]">
       <ChatSidebar
         activeId={activeNav}
         onNavigate={setActiveNav}
         workspaceDisplayMode={workspaceDisplayMode}
         onWorkspaceDisplayModeChange={persistWorkspaceDisplayMode}
       />
-      <div className="flex h-dvh min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <header className="sticky top-0 z-10 flex h-14 shrink-0 items-center gap-3 border-b border-charcoal/[0.08] bg-cream-light/80 px-4 backdrop-blur-sm sm:px-6">
+      <div
+        className={`flex h-dvh min-h-0 min-w-0 flex-1 flex-col overflow-hidden lg:pb-0 ${MOBILE_SHELL_BOTTOM_PAD_CLASS}`}
+      >
+        <header className="sticky top-0 z-10 flex min-h-14 shrink-0 items-center gap-2 border-b border-charcoal/[0.08] bg-cream-light/80 px-4 backdrop-blur-sm sm:gap-3 sm:px-6">
           <div className="relative shrink-0">
             <div
               className="flex size-9 items-center justify-center rounded-full bg-charcoal font-sans text-xs font-semibold tracking-tight text-cream"
@@ -215,11 +238,47 @@ export function ChatShell({
               aria-label="Online"
             />
           </div>
-          <div className="min-w-0">
-            <h1 className="truncate font-serif text-lg tracking-tight text-charcoal">
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate font-serif text-lg tracking-tight text-charcoal lg:hidden">
+              {chatNavLabel(activeNav)}
+            </h1>
+            <p className="text-xs text-charcoal-light/80 lg:hidden">Online</p>
+            <h1 className="hidden truncate font-serif text-lg tracking-tight text-charcoal lg:block">
               Rex
             </h1>
-            <p className="text-xs text-charcoal-light/80">Online</p>
+            <p className="hidden text-xs text-charcoal-light/80 lg:block">
+              Online
+            </p>
+          </div>
+          <div
+            className="flex max-w-[min(100%,11rem)] shrink-0 flex-col gap-1 lg:hidden"
+            role="presentation"
+          >
+            <p className="text-[9px] font-medium uppercase tracking-wide text-charcoal-light/70">
+              Workspace
+            </p>
+            <div
+              className="flex rounded-lg bg-charcoal/[0.05] p-0.5"
+              role="group"
+              aria-label="Workspace display mode"
+            >
+              <button
+                type="button"
+                className={workspaceModeButtonClass(workspaceDisplayMode === "live")}
+                onClick={() => persistWorkspaceDisplayMode("live")}
+              >
+                Live
+              </button>
+              <button
+                type="button"
+                className={workspaceModeButtonClass(
+                  workspaceDisplayMode === "empty",
+                )}
+                onClick={() => persistWorkspaceDisplayMode("empty")}
+              >
+                Empty
+              </button>
+            </div>
           </div>
         </header>
         <main
@@ -251,6 +310,11 @@ export function ChatShell({
               autoOpenCreate={pendingContactsAutoCreate}
               onAutoOpenCreateHandled={onContactsAutoCreateHandled}
             />
+          ) : activeNav === "emails" ? (
+            <EmailsBrowsePanel
+              initialEmailId={pendingEmailDetailId}
+              onInitialEmailIdHandled={onPendingEmailDetailHandled}
+            />
           ) : activeNav === "organisations" ? (
             <OrganisationsBrowsePanel />
           ) : activeNav === "pipeline" ? (
@@ -267,11 +331,13 @@ export function ChatShell({
         onClick={onOpenQuickCapture}
         hidden={quickCaptureOpen}
       />
+      <ChatMobileNav activeId={activeNav} onNavigate={setActiveNav} />
       <QuickCaptureDialog
         open={quickCaptureOpen}
         onClose={onCloseQuickCapture}
         onCaptured={onCaptured}
         onOpenSuggestions={onOpenSuggestionsFromCapture}
+        onOpenEmail={onOpenEmailFromCapture}
       />
     </div>
   );

@@ -33,6 +33,7 @@ export async function GET(_req: Request, context: RouteContext) {
       phone: row.phone,
       email: row.email,
       notes: row.notes,
+      internalOwner: row.internal_owner,
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Query failed";
@@ -70,6 +71,7 @@ export async function PATCH(req: Request, context: RouteContext) {
       phone: fields.value.phone,
       email: fields.value.email,
       notes: fields.value.notes,
+      internal_owner: fields.value.internalOwner,
     });
     if (!row) {
       return NextResponse.json({ error: "Contact not found" }, { status: 404 });

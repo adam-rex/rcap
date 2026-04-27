@@ -1,0 +1,104 @@
+-- Internal attribution: which Rex team member added the contact (James, Adam, Neil).
+
+alter table public.contacts
+  add column if not exists internal_owner text;
+
+comment on column public.contacts.internal_owner is
+  'Internal only: Rex team member who added this contact (e.g. James, Adam, Neil).';
+
+create or replace function public.workspace_contacts_page (
+  p_search text,
+  p_page int,
+  p_page_size int,
+  p_role text,
+  p_organisation_type text
+)
+returns json
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_q text;
+  v_role text;
+  v_org_type text;
+  v_page int;
+  v_size int;
+  v_total bigint;
+  v_rows json;
+begin
+  v_page := greatest(coalesce(p_page, 1), 1);
+  v_size := least(greatest(coalesce(p_page_size, 12), 1), 50);
+  v_q := nullif(trim(coalesce(p_search, '')), '');
+  v_role := nullif(trim(coalesce(p_role, '')), '');
+  v_org_type := nullif(trim(coalesce(p_organisation_type, '')), '');
+
+  select count(*)::bigint into v_total
+  from public.contacts c
+  left join public.organisations o on o.id = c.organisation_id
+  where
+    (v_role is null or coalesce(c.role, '') ilike '%' || v_role || '%')
+    and (v_org_type is null or coalesce(o.type, '') ilike '%' || v_org_type || '%')
+    and (
+      v_q is null
+      or c.name ilike '%' || v_q || '%'
+      or coalesce(c.contact_type, '') ilike '%' || v_q || '%'
+      or coalesce(c.sector, '') ilike '%' || v_q || '%'
+      or coalesce(c.internal_owner, '') ilike '%' || v_q || '%'
+      or coalesce(c.role, '') ilike '%' || v_q || '%'
+      or coalesce(c.notes, '') ilike '%' || v_q || '%'
+      or coalesce(c.geography, '') ilike '%' || v_q || '%'
+      or coalesce(o.name, '') ilike '%' || v_q || '%'
+    );
+
+  select coalesce(json_agg(sub.obj order by sub.ord desc), '[]'::json) into v_rows
+  from (
+    select
+      json_build_object(
+        'id', c.id,
+        'name', c.name,
+        'contact_type', c.contact_type,
+        'sector', c.sector,
+        'role', c.role,
+        'geography', c.geography,
+        'last_contact_date', c.last_contact_date,
+        'organisation_id', c.organisation_id,
+        'organisation_name', o.name,
+        'organisation_type', o.type,
+        'internal_owner', c.internal_owner
+      ) as obj,
+      c.created_at as ord
+    from public.contacts c
+    left join public.organisations o on o.id = c.organisation_id
+    where
+      (v_role is null or coalesce(c.role, '') ilike '%' || v_role || '%')
+      and (v_org_type is null or coalesce(o.type, '') ilike '%' || v_org_type || '%')
+      and (
+        v_q is null
+        or c.name ilike '%' || v_q || '%'
+        or coalesce(c.contact_type, '') ilike '%' || v_q || '%'
+        or coalesce(c.sector, '') ilike '%' || v_q || '%'
+        or coalesce(c.internal_owner, '') ilike '%' || v_q || '%'
+        or coalesce(c.role, '') ilike '%' || v_q || '%'
+        or coalesce(c.notes, '') ilike '%' || v_q || '%'
+        or coalesce(c.geography, '') ilike '%' || v_q || '%'
+        or coalesce(o.name, '') ilike '%' || v_q || '%'
+      )
+    order by c.created_at desc
+    offset (v_page - 1) * v_size
+    limit v_size
+  ) sub;
+
+  return json_build_object(
+    'total', coalesce(v_total, 0),
+    'rows', coalesce(v_rows, '[]'::json)
+  );
+end;
+$$;
+
+comment on function public.workspace_contacts_page (text, int, int, text, text) is
+  'Paged contact list with optional role + organisation type filters and search on name, contact type, sector, internal_owner, role, notes, geography, and organisation name.';
+
+grant execute on function public.workspace_contacts_page (text, int, int, text, text) to authenticated;
+grant execute on function public.workspace_contacts_page (text, int, int, text, text) to service_role;

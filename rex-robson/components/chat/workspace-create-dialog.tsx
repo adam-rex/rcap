@@ -36,7 +36,8 @@ export function WorkspaceCreateDialog({
   // Mount-detect so we only call createPortal client-side (avoids SSR mismatch).
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
-    setMounted(true);
+    // Client-only portal mount; avoids SSR/hydration mismatch for createPortal target.
+    queueMicrotask(() => setMounted(true));
   }, []);
 
   useEffect(() => {
@@ -55,7 +56,7 @@ export function WorkspaceCreateDialog({
   // inside the dialog can't bubble into the card and trigger a stage move.
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4"
+      className="fixed inset-0 z-50 flex items-end justify-center p-0 pt-[env(safe-area-inset-top,0px)] sm:items-center sm:p-4"
       draggable={false}
       onMouseDown={(e) => e.stopPropagation()}
       onDragStart={(e) => {
@@ -73,7 +74,7 @@ export function WorkspaceCreateDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="workspace-create-title"
-        className="relative mt-auto max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-t-xl border border-charcoal/15 bg-cream shadow-xl sm:mt-0 sm:rounded-xl"
+        className="relative mt-auto max-h-[min(90dvh,calc(100dvh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)))] w-full max-w-md overflow-y-auto rounded-t-xl border border-charcoal/15 bg-cream pb-[env(safe-area-inset-bottom,0px)] shadow-xl sm:mt-0 sm:max-h-[90dvh] sm:rounded-xl"
       >
         <div className="flex items-center justify-between gap-3 border-b border-charcoal/10 px-4 py-3">
           <h3

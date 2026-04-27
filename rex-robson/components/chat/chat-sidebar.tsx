@@ -1,26 +1,13 @@
 "use client";
 
 import {
-  Building2,
-  LayoutDashboard,
-  LayoutGrid,
-  MessageCircle,
-  Sparkles,
-  Users,
-} from "lucide-react";
+  CHAT_NAV_ITEMS,
+  workspaceModeButtonClass,
+  type ChatNavId,
+  type WorkspaceDisplayMode,
+} from "./chat-nav-config";
 
-const navItems = [
-  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, hidden: false },
-  { id: "ask", label: "Ask Rex", icon: MessageCircle, hidden: false },
-  { id: "contacts", label: "Contacts", icon: Users, hidden: false },
-  { id: "organisations", label: "Organisations", icon: Building2, hidden: true },
-  { id: "pipeline", label: "Pipeline", icon: LayoutGrid, hidden: false },
-  { id: "suggestions", label: "Suggestions", icon: Sparkles, hidden: false },
-] as const;
-
-export type ChatNavId = (typeof navItems)[number]["id"];
-
-export type WorkspaceDisplayMode = "live" | "empty";
+export type { ChatNavId, WorkspaceDisplayMode } from "./chat-nav-config";
 
 type ChatSidebarProps = {
   activeId?: ChatNavId;
@@ -29,15 +16,6 @@ type ChatSidebarProps = {
   onWorkspaceDisplayModeChange?: (mode: WorkspaceDisplayMode) => void;
 };
 
-function modeButtonClass(active: boolean) {
-  return [
-    "flex-1 rounded-md px-2 py-1.5 text-center text-xs font-medium transition-colors",
-    active
-      ? "bg-cream text-charcoal shadow-sm"
-      : "text-charcoal-light hover:text-charcoal",
-  ].join(" ");
-}
-
 export function ChatSidebar({
   activeId = "dashboard",
   onNavigate,
@@ -45,7 +23,7 @@ export function ChatSidebar({
   onWorkspaceDisplayModeChange,
 }: ChatSidebarProps) {
   return (
-    <aside className="flex h-dvh w-56 shrink-0 flex-col overflow-hidden border-r border-charcoal/[0.08] bg-cream-light/80 backdrop-blur-sm">
+    <aside className="hidden h-dvh w-56 shrink-0 flex-col overflow-hidden border-r border-charcoal/[0.08] bg-cream-light/80 backdrop-blur-sm lg:flex">
       <div className="flex h-14 shrink-0 items-center border-b border-charcoal/[0.06] px-4">
         <span className="font-serif text-lg tracking-tight text-charcoal">
           Rex
@@ -55,7 +33,7 @@ export function ChatSidebar({
         className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-hidden p-2"
         aria-label="Main"
       >
-        {navItems.map(({ id, label, icon: Icon, hidden }) => {
+        {CHAT_NAV_ITEMS.map(({ id, label, icon: Icon, hidden }) => {
           if (hidden) return null;
           const active = id === activeId;
           return (
@@ -91,14 +69,14 @@ export function ChatSidebar({
         >
           <button
             type="button"
-            className={modeButtonClass(workspaceDisplayMode === "live")}
+            className={workspaceModeButtonClass(workspaceDisplayMode === "live")}
             onClick={() => onWorkspaceDisplayModeChange?.("live")}
           >
             Live data
           </button>
           <button
             type="button"
-            className={modeButtonClass(workspaceDisplayMode === "empty")}
+            className={workspaceModeButtonClass(workspaceDisplayMode === "empty")}
             onClick={() => onWorkspaceDisplayModeChange?.("empty")}
           >
             Empty

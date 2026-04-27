@@ -35,6 +35,7 @@ export async function POST(req: Request) {
       phone: fields.value.phone,
       email: fields.value.email,
       notes: fields.value.notes,
+      internal_owner: fields.value.internalOwner,
     });
     return NextResponse.json(row, { status: 201 });
   } catch (e) {

@@ -15,6 +15,27 @@ export {
   WORKSPACE_CONTACTS_PAGE_SIZE_MAX,
 } from "@/lib/data/workspace-contacts.types";
 
+/** First trimmed non-empty string, or null (handles `""` so we never keep blank scalars). */
+function firstNonEmptyText(
+  ...candidates: (string | null | undefined)[]
+): string | null {
+  for (const c of candidates) {
+    if (c == null) continue;
+    const t = String(c).trim();
+    if (t.length > 0) return t;
+  }
+  return null;
+}
+
+function rpcText(
+  x: Record<string, unknown>,
+  snake: string,
+  camel?: string,
+): string | null {
+  const raw = camel != null ? (x[snake] ?? x[camel]) : x[snake];
+  return firstNonEmptyText(raw == null ? null : String(raw));
+}
+
 function parseRpcPayload(data: unknown): WorkspaceContactsPageResult {
   if (data == null || typeof data !== "object") {
     return { rows: [], total: 0 };
@@ -27,61 +48,88 @@ function parseRpcPayload(data: unknown): WorkspaceContactsPageResult {
     return {
       id: String(x.id ?? ""),
       name: String(x.name ?? ""),
-      contact_type: x.contact_type == null ? null : String(x.contact_type),
-      sector: x.sector == null ? null : String(x.sector),
-      role: x.role == null ? null : String(x.role),
-      geography: x.geography == null ? null : String(x.geography),
+      contact_type: rpcText(x, "contact_type", "contactType"),
+      sector: rpcText(x, "sector"),
+      role: rpcText(x, "role"),
+      geography: rpcText(x, "geography"),
       last_contact_date:
         x.last_contact_date == null ? null : String(x.last_contact_date),
       organisation_id:
         x.organisation_id == null ? null : String(x.organisation_id),
-      organisation_name:
-        x.organisation_name == null ? null : String(x.organisation_name),
-      organisation_type:
-        x.organisation_type == null ? null : String(x.organisation_type),
+      organisation_name: rpcText(x, "organisation_name", "organisationName"),
+      organisation_type: rpcText(x, "organisation_type", "organisationType"),
+      internal_owner: rpcText(x, "internal_owner", "internalOwner"),
     };
   });
   return { rows, total };
 }
 
 /**
- * Older `workspace_contacts_page` RPCs omit `contact_type` / `sector`. Merge from `contacts`
- * so the list UI can show Geography · Type · Sector without requiring a DB migration replay.
+ * Older `workspace_contacts_page` RPCs may omit newer columns. Merge from `contacts`
+ * so the list UI stays correct without requiring every migration to be replayed.
  */
-async function mergeContactTypeAndSectorFromTable(
+async function mergeContactListExtrasFromTable(
   client: SupabaseClient,
   rows: WorkspaceContactPageRow[],
 ): Promise<WorkspaceContactPageRow[]> {
   if (rows.length === 0) return rows;
   const ids = rows.map((r) => r.id).filter((id) => id.length > 0);
-  const { data, error } = await client
-    .from("contacts")
-    .select("id,contact_type,sector")
-    .in("id", ids);
-  if (error) {
-    // Column missing or RLS — keep RPC rows (42703 = undefined_column)
-    const code = (error as { code?: string }).code;
-    if (code === "42703" || code === "PGRST204") return rows;
-    throw error;
+  let data: Record<string, unknown>[] | null = null;
+  {
+    const res = await client
+      .from("contacts")
+      .select("id,contact_type,sector,internal_owner")
+      .in("id", ids);
+    if (res.error) {
+      const code = (res.error as { code?: string }).code;
+      if (code === "42703" || code === "PGRST204") {
+        const retry = await client
+          .from("contacts")
+          .select("id,contact_type,sector")
+          .in("id", ids);
+        if (retry.error) {
+          const c2 = (retry.error as { code?: string }).code;
+          if (c2 === "42703" || c2 === "PGRST204") return rows;
+          throw retry.error;
+        }
+        data = (retry.data ?? []) as Record<string, unknown>[];
+      } else {
+        throw res.error;
+      }
+    } else {
+      data = (res.data ?? []) as Record<string, unknown>[];
+    }
   }
   if (!data?.length) return rows;
   const byId = new Map(
-    data.map((d) => [
-      String(d.id),
-      {
-        contact_type:
-          d.contact_type == null ? null : String(d.contact_type).trim() || null,
-        sector: d.sector == null ? null : String(d.sector).trim() || null,
-      },
-    ]),
+    data.map((d) => {
+      const rec = d;
+      const ct = rec.contact_type ?? rec.contactType;
+      const sec = rec.sector;
+      const io = rec.internal_owner ?? rec.internalOwner;
+      return [
+        String(rec.id ?? ""),
+        {
+          contact_type: firstNonEmptyText(
+            ct == null ? null : String(ct),
+          ),
+          sector: firstNonEmptyText(sec == null ? null : String(sec)),
+          internal_owner: firstNonEmptyText(io == null ? null : String(io)),
+        },
+      ];
+    }),
   );
   return rows.map((r) => {
     const extra = byId.get(r.id);
     if (!extra) return r;
     return {
       ...r,
-      contact_type: extra.contact_type ?? r.contact_type,
-      sector: extra.sector ?? r.sector,
+      contact_type: firstNonEmptyText(extra.contact_type, r.contact_type),
+      sector: firstNonEmptyText(extra.sector, r.sector),
+      internal_owner: firstNonEmptyText(
+        extra.internal_owner,
+        r.internal_owner,
+      ),
     };
   });
 }
@@ -115,7 +163,7 @@ export async function fetchWorkspaceContactsPageWithClient(
   }
 
   const parsed = parseRpcPayload(data);
-  const rows = await mergeContactTypeAndSectorFromTable(client, parsed.rows);
+  const rows = await mergeContactListExtrasFromTable(client, parsed.rows);
   return { rows, total: parsed.total };
 }
 

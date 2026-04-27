@@ -192,6 +192,7 @@ export async function applyRexEmailExtraction(
           phone: optStr(p.phone),
           email: optStr(p.email),
           notes: optStr(p.notes),
+          internal_owner: null,
         });
         await markApplied(client, params.extractionId, {
           ...empty,

@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { Plus, Tag } from "lucide-react";
 import type { FormEvent } from "react";
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -11,6 +11,10 @@ import {
   WORKSPACE_ORGANISATIONS_PAGE_SIZE_MAX,
   type WorkspaceOrganisationPageRow,
 } from "@/lib/data/workspace-organisations-page.types";
+import {
+  INTERNAL_CONTACT_OWNERS,
+  isInternalContactOwner,
+} from "@/lib/constants/internal-contact-owners";
 import { ContactDetailView } from "./contact-detail-view";
 import { WorkspaceBrowsePagination } from "./workspace-browse-pagination";
 import {
@@ -78,7 +82,14 @@ type ApiErr = { error?: string; hint?: string };
 /** Select value: create org via inline fields, then link contact. */
 const CONTACT_FORM_NEW_ORG_VALUE = "__new__";
 
-const CONTACT_TYPE_OPTIONS = ["Founder", "Investor", "Lender", "Other"] as const;
+const CONTACT_TYPE_OPTIONS = [
+  "Founder",
+  "Investor",
+  "Lender",
+  "Advisor",
+  "Corporate",
+  "Other",
+] as const;
 
 type ContactsBrowsePanelProps = {
   autoOpenCreate?: boolean;
@@ -118,6 +129,9 @@ export function ContactsBrowsePanel({
   const [newPhone, setNewPhone] = useState("");
   const [newEmail, setNewEmail] = useState("");
   const [newNotes, setNewNotes] = useState("");
+  const [newInternalOwner, setNewInternalOwner] = useState<string>(
+    INTERNAL_CONTACT_OWNERS[0],
+  );
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [activeOrganisationType, setActiveOrganisationType] = useState("");
   const [organisationTypeOptions, setOrganisationTypeOptions] = useState<string[]>(
@@ -263,6 +277,7 @@ export function ContactsBrowsePanel({
     setNewPhone("");
     setNewEmail("");
     setNewNotes("");
+    setNewInternalOwner(INTERNAL_CONTACT_OWNERS[0]);
     setFormError(null);
     setFormOpen(true);
   }, []);
@@ -292,6 +307,7 @@ export function ContactsBrowsePanel({
     setNewPhone("");
     setNewEmail("");
     setNewNotes("");
+    setNewInternalOwner(INTERNAL_CONTACT_OWNERS[0]);
     try {
       const res = await fetch(`/api/workspace/contacts/${c.id}`);
       const data = (await res.json()) as {
@@ -305,6 +321,7 @@ export function ContactsBrowsePanel({
         phone?: string | null;
         email?: string | null;
         notes?: string | null;
+        internalOwner?: string | null;
       };
       if (!res.ok) {
         const msg =
@@ -323,6 +340,11 @@ export function ContactsBrowsePanel({
       setNewPhone(data.phone ?? "");
       setNewEmail(data.email ?? "");
       setNewNotes(data.notes ?? "");
+      setNewInternalOwner(
+        isInternalContactOwner(data.internalOwner)
+          ? data.internalOwner
+          : INTERNAL_CONTACT_OWNERS[0],
+      );
     } catch {
       setFormError("Network error while loading contact.");
     } finally {
@@ -420,6 +442,7 @@ export function ContactsBrowsePanel({
       phone: newPhone.trim() === "" ? null : newPhone.trim(),
       email: newEmail.trim() === "" ? null : newEmail.trim(),
       notes: newNotes.trim() === "" ? null : newNotes.trim(),
+      internalOwner: newInternalOwner,
     };
     try {
       const isEdit = formMode === "edit" && editingId != null;
@@ -517,6 +540,30 @@ export function ContactsBrowsePanel({
               className={WORKSPACE_FORM_INPUT_CLASS}
               placeholder="e.g. Fintech"
             />
+          </div>
+          <div>
+            <label
+              htmlFor="contact-form-internal-owner"
+              className={WORKSPACE_FORM_LABEL_CLASS}
+            >
+              Rex team (internal)
+            </label>
+            <select
+              id="contact-form-internal-owner"
+              required
+              value={newInternalOwner}
+              onChange={(e) => setNewInternalOwner(e.target.value)}
+              className={WORKSPACE_FORM_INPUT_CLASS}
+            >
+              {INTERNAL_CONTACT_OWNERS.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-[11px] text-charcoal-light/80">
+              Who added this contact to Rex — not shown to founders or LPs.
+            </p>
           </div>
           <div>
             <label
@@ -863,9 +910,13 @@ export function ContactsBrowsePanel({
                 </li>
               ))
             : rows.map((c) => {
-                const sub = [c.geography, c.contact_type, c.sector]
-                  .filter(Boolean)
+                const sub = [c.contact_type, c.sector, c.geography]
+                  .filter((s): s is string => typeof s === "string" && s.trim().length > 0)
                   .join(" · ");
+                const owner =
+                  c.internal_owner?.trim().length
+                    ? c.internal_owner.trim()
+                    : null;
                 const strength = recencyStrength(c.last_contact_date);
                 const activeDots = strength <= 0 ? 0 : Math.ceil(strength * 5);
                 const strengthPct = Math.round(strength * 100);
@@ -877,15 +928,40 @@ export function ContactsBrowsePanel({
                       className={`${WORKSPACE_BROWSE_ROW_BUTTON_CLASS} rounded-xl border border-charcoal/[0.07] bg-cream px-3 py-3 shadow-[0_1px_0_rgba(10,10,10,0.02)] transition hover:border-charcoal/[0.12] hover:bg-cream-light/40`}
                       aria-label={`View ${c.name}`}
                     >
-                      <div className="flex min-w-0 flex-1 items-center gap-3">
-                        <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-sky-100 text-xs font-semibold text-sky-800">
-                          {initials(c.name)}
+                      <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                        <div className="flex min-w-0 flex-1 items-center gap-3">
+                          <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-sky-100 text-xs font-semibold text-sky-800">
+                            {initials(c.name)}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="text-sm font-semibold text-charcoal">
+                                {c.name}
+                              </p>
+                              <span
+                                className={
+                                  owner
+                                    ? "inline-flex shrink-0 items-center gap-1 rounded-md border border-charcoal/12 bg-white px-2 py-0.5 text-[11px] font-medium text-charcoal shadow-[0_1px_0_rgba(10,10,10,0.04)]"
+                                    : "inline-flex shrink-0 items-center gap-1 rounded-md border border-charcoal/15 bg-white/90 px-2 py-0.5 text-[11px] font-medium text-charcoal-light"
+                                }
+                                title="Rex team (internal)"
+                              >
+                                <Tag
+                                  className={
+                                    owner
+                                      ? "size-3 shrink-0 text-charcoal/65"
+                                      : "size-3 shrink-0 text-charcoal-light/90"
+                                  }
+                                  strokeWidth={1.75}
+                                  aria-hidden
+                                />
+                                {owner ?? "Not set"}
+                              </span>
+                            </div>
+                            {muted(sub || null)}
+                          </div>
                         </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold text-charcoal">{c.name}</p>
-                          {muted(sub || null)}
-                        </div>
-                        <div className="ml-2 flex shrink-0 items-center gap-2">
+                        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 pl-12 sm:ml-2 sm:justify-end sm:pl-0">
                           <div
                             className="flex items-center gap-1"
                             aria-label={`Recency strength ${strengthPct}%`}

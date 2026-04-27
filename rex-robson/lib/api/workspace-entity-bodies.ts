@@ -4,6 +4,10 @@ import {
   parseOptionalUuid,
   parseRequiredString,
 } from "@/lib/api/workspace-post-parse";
+import {
+  INTERNAL_CONTACT_OWNERS,
+  isInternalContactOwner,
+} from "@/lib/constants/internal-contact-owners";
 
 export type OrganisationUpsertBody = {
   name: string;
@@ -42,6 +46,8 @@ export type ContactUpsertBody = {
   phone: string | null;
   email: string | null;
   notes: string | null;
+  /** Rex team member who added the contact (internal). */
+  internalOwner: string | null;
 };
 
 export function parseContactUpsertBody(
@@ -67,6 +73,23 @@ export function parseContactUpsertBody(
   if (!email.ok) return email;
   const notes = parseOptionalString(body, "notes", 8000);
   if (!notes.ok) return notes;
+  const internalOwnerRaw = body["internalOwner"];
+  let internalOwner: string | null = null;
+  if (internalOwnerRaw != null) {
+    if (typeof internalOwnerRaw !== "string") {
+      return { ok: false, error: "internalOwner must be a string or null." };
+    }
+    const t = internalOwnerRaw.trim();
+    if (t !== "") {
+      if (!isInternalContactOwner(t)) {
+        return {
+          ok: false,
+          error: `internalOwner must be one of: ${INTERNAL_CONTACT_OWNERS.join(", ")}.`,
+        };
+      }
+      internalOwner = t;
+    }
+  }
   return {
     ok: true,
     value: {
@@ -79,6 +102,7 @@ export function parseContactUpsertBody(
       phone: phone.value,
       email: email.value,
       notes: notes.value,
+      internalOwner,
     },
   };
 }

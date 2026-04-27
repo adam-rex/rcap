@@ -12,6 +12,8 @@ export type WorkspaceContactPageRow = {
   organisation_id: string | null;
   organisation_name: string | null;
   organisation_type: string | null;
+  /** Rex team member who added the contact (internal). */
+  internal_owner: string | null;
 };
 
 export type WorkspaceContactsPageResult = {
