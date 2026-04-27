@@ -23,7 +23,7 @@ export function ChatSidebar({
   onWorkspaceDisplayModeChange,
 }: ChatSidebarProps) {
   return (
-    <aside className="hidden h-dvh w-56 shrink-0 flex-col overflow-hidden border-r border-charcoal/[0.08] bg-cream-light/80 backdrop-blur-sm lg:flex">
+    <aside className="hidden h-full min-h-0 w-56 shrink-0 flex-col overflow-hidden border-r border-charcoal/[0.08] bg-cream-light/80 backdrop-blur-sm lg:flex">
       <div className="flex h-14 shrink-0 items-center border-b border-charcoal/[0.06] px-4">
         <span className="font-serif text-lg tracking-tight text-charcoal">
           Rex

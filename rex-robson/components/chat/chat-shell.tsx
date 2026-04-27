@@ -214,7 +214,7 @@ export function ChatShell({
   }, []);
 
   return (
-    <div className="flex h-dvh max-h-dvh flex-1 overflow-hidden bg-cream pt-[env(safe-area-inset-top,0px)]">
+    <div className="flex min-h-0 h-dvh max-h-dvh flex-1 overflow-hidden bg-cream pt-[env(safe-area-inset-top,0px)]">
       <ChatSidebar
         activeId={activeNav}
         onNavigate={setActiveNav}
@@ -222,7 +222,7 @@ export function ChatShell({
         onWorkspaceDisplayModeChange={persistWorkspaceDisplayMode}
       />
       <div
-        className={`flex h-dvh min-h-0 min-w-0 flex-1 flex-col overflow-hidden lg:pb-0 ${MOBILE_SHELL_BOTTOM_PAD_CLASS}`}
+        className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden lg:pb-0 ${MOBILE_SHELL_BOTTOM_PAD_CLASS}`}
       >
         <header className="sticky top-0 z-10 flex min-h-14 shrink-0 items-center gap-2 border-b border-charcoal/[0.08] bg-cream-light/80 px-4 backdrop-blur-sm sm:gap-3 sm:px-6">
           <div className="relative shrink-0">
