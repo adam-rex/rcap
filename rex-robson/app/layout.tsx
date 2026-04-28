@@ -49,8 +49,28 @@ export default function RootLayout({
       lang="en"
       className={`${inter.variable} ${playfair.variable} h-full`}
     >
-      <body className="min-h-full flex flex-col">
+      <body
+        className="min-h-full flex flex-col"
+        style={{
+          backgroundColor: "#f5f5f0",
+          color: "#111111",
+          minHeight: "100vh",
+        }}
+      >
         <RegisterServiceWorker />
+        <noscript>
+          <div
+            style={{
+              padding: "1.5rem",
+              fontFamily: "system-ui, sans-serif",
+              background: "#f5f5f0",
+              color: "#111",
+            }}
+          >
+            Rex needs JavaScript enabled. Open{" "}
+            <strong>http://localhost:3000</strong> in your browser.
+          </div>
+        </noscript>
         {children}
       </body>
     </html>
