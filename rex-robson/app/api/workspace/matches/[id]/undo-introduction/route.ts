@@ -22,9 +22,7 @@ export async function POST(_req: Request, context: RouteContext) {
       const status =
         result.reason === "not_found"
           ? 404
-          : result.reason === "has_transactions"
-            ? 409
-            : 422;
+          : 422;
       return NextResponse.json({ error: result.reason }, { status });
     }
     return NextResponse.json({ ok: true });

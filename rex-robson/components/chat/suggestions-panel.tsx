@@ -9,9 +9,16 @@ import {
   useState,
   useTransition,
 } from "react";
+import {
+  matchFitOutOfFive,
+  SUGGESTION_MATCH_FIT_TIERS,
+  suggestionTierDefinition,
+  suggestionTierMetaForRaw,
+} from "@/lib/match/suggestion-score";
 import { rexEmptySuggestions } from "@/lib/rex/voice";
 import type { WorkspaceSuggestionRow } from "@/lib/data/workspace-lists";
 import type { MatchKind } from "@/lib/data/workspace-matches-page.types";
+import { stripWorkspaceMarkdownDecorators } from "@/lib/format/workspace-display-text";
 
 const LAST_RUN_STORAGE_KEY = "rex:suggestions:lastRun";
 const THROTTLE_MS = 60_000;
@@ -35,9 +42,11 @@ const KIND_LABEL: Record<MatchKind, string> = {
 
 function muted(line: string | null | undefined) {
   if (line == null || line === "") return null;
+  const cleaned = stripWorkspaceMarkdownDecorators(line);
+  if (cleaned === "") return null;
   return (
     <p className="mt-0.5 whitespace-pre-line line-clamp-6 text-xs text-charcoal-light/85">
-      {line}
+      {cleaned}
     </p>
   );
 }
@@ -49,18 +58,6 @@ function formatRelative(ts: number): string {
   if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
   if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
   return `${Math.floor(diff / 86_400_000)}d ago`;
-}
-
-// Raw scores from scorePair (lib/data/intro-match-suggestions.ts) start at
-// MIN_SCORE=5 and cap around 14 with all signals present. Bucket into 1–5 so
-// the UI shows a clean confidence rating ("X/5") rather than a raw heuristic.
-function scoreOutOfFive(raw: number): number {
-  if (!Number.isFinite(raw)) return 1;
-  if (raw >= 13) return 5;
-  if (raw >= 11) return 4;
-  if (raw >= 9) return 3;
-  if (raw >= 7) return 2;
-  return 1;
 }
 
 function resultSummary(r: GenerateMatchesResult): string {
@@ -230,14 +227,14 @@ export function SuggestionsPanel({ rows, isEmpty }: SuggestionsPanelProps) {
     if (selectedScores.size === 0) return tabRows;
     return tabRows.filter((r) => {
       if (typeof r.score !== "number") return false;
-      return selectedScores.has(scoreOutOfFive(r.score));
+      return selectedScores.has(matchFitOutOfFive(r.score));
     });
   }, [tabRows, selectedScores]);
   const scoreCounts = useMemo(() => {
     const counts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
     for (const r of tabRows) {
       if (typeof r.score !== "number") continue;
-      const bucket = scoreOutOfFive(r.score);
+      const bucket = matchFitOutOfFive(r.score);
       counts[bucket] = (counts[bucket] ?? 0) + 1;
     }
     return counts;
@@ -274,7 +271,7 @@ export function SuggestionsPanel({ rows, isEmpty }: SuggestionsPanelProps) {
                   ? `${filteredRows.length} of ${liveRows.length} row${liveRows.length === 1 ? "" : "s"} match score filter`
                   : `${liveRows.length} row${liveRows.length === 1 ? "" : "s"} from your workspace`
               : archivedEmpty
-                ? "No archived suggestions yet — dismissed suggestions show up here."
+                ? "No archived suggestions yet — dismissed suggestions and undone introductions show up here."
                 : filterActive
                   ? `${filteredRows.length} of ${archivedRows.length} archived match score filter`
                   : `${archivedRows.length} archived suggestion${archivedRows.length === 1 ? "" : "s"}`}
@@ -346,23 +343,24 @@ export function SuggestionsPanel({ rows, isEmpty }: SuggestionsPanelProps) {
 
       <div className="mb-4 flex shrink-0 flex-wrap items-center gap-2">
         <span className="text-[11px] font-medium uppercase tracking-wide text-charcoal-light/70">
-          Score
+          Match fit
         </span>
         <div
           className="inline-flex items-center gap-1 rounded-lg border border-charcoal/[0.08] bg-cream-light/60 p-1"
           role="group"
-          aria-label="Filter by score"
+          aria-label="Filter by match fit tier"
         >
           {([1, 2, 3, 4, 5] as const).map((n) => {
             const isOn = selectedScores.has(n);
             const count = scoreCounts[n] ?? 0;
+            const def = suggestionTierDefinition(n);
             return (
               <button
                 key={n}
                 type="button"
                 onClick={() => toggleScore(n)}
                 aria-pressed={isOn}
-                title={`Show ${n}/5 suggestions`}
+                title={`${def.tier}/5 — ${def.label}. ${def.detail}`}
                 className={
                   "inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors " +
                   (isOn
@@ -396,6 +394,38 @@ export function SuggestionsPanel({ rows, isEmpty }: SuggestionsPanelProps) {
         ) : null}
       </div>
 
+      <details className="mb-4 rounded-lg border border-charcoal/[0.08] bg-cream-light/50 px-3 py-2 text-xs text-charcoal-light">
+        <summary className="cursor-pointer list-none font-medium text-charcoal outline-none marker:content-none [&::-webkit-details-marker]:hidden">
+          How match fit is calculated
+        </summary>
+        <p className="mt-2 leading-relaxed text-charcoal-light/90">
+          Rex compares each founder to each investor or lender using your contact
+          fields: overlapping{" "}
+          <span className="text-charcoal">sectors</span> and{" "}
+          <span className="text-charcoal">deal types</span>, whether{" "}
+          <span className="text-charcoal">cheque / deal-size</span> ranges
+          intersect, shared{" "}
+          <span className="text-charcoal">geography</span>, whether at least one
+          side has a warm <span className="text-charcoal">relationship score</span>{" "}
+          (7+), and whether both sides look{" "}
+          <span className="text-charcoal">stale</span> (last contacted over a year
+          ago — that reduces fit). The raw total is bucketed into five tiers:
+        </p>
+        <ul className="mt-3 space-y-2.5 border-t border-charcoal/[0.06] pt-3">
+          {SUGGESTION_MATCH_FIT_TIERS.map((d) => (
+            <li key={d.tier} className="leading-relaxed">
+              <span className="font-semibold text-charcoal">
+                {d.tier}/5 — {d.label}
+              </span>
+              <span className="text-charcoal-light"> — {d.summary}</span>
+              <span className="mt-0.5 block pl-0 text-[11px] text-charcoal-light/85">
+                {d.detail}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </details>
+
       {lastResult ? (
         <div className="mb-3 rounded-lg border border-charcoal/[0.08] bg-cream-light/60 px-3 py-2 text-xs text-charcoal-light">
           {resultSummary(lastResult)}
@@ -423,8 +453,7 @@ export function SuggestionsPanel({ rows, isEmpty }: SuggestionsPanelProps) {
           {filteredEmpty && !tabEmpty ? (
             <>
               <p className="mt-4 max-w-md text-[15px] leading-relaxed text-charcoal">
-                No suggestions match the selected score
-                {selectedScores.size === 1 ? "" : "s"}.
+                No suggestions match the selected tiers.
               </p>
               <p className="mt-3 max-w-md text-sm text-charcoal-light">
                 Try a different score or{" "}
@@ -461,8 +490,10 @@ export function SuggestionsPanel({ rows, isEmpty }: SuggestionsPanelProps) {
               </p>
               <p className="mt-3 max-w-md text-sm text-charcoal-light">
                 Suggestions you dismiss from the{" "}
-                <span className="font-medium text-charcoal">Live</span> tab
-                will show up here.
+                <span className="font-medium text-charcoal">Live</span> tab, or
+                undo from the{" "}
+                <span className="font-medium text-charcoal">Opportunities</span>{" "}
+                tab, appear here.
               </p>
             </>
           )}
@@ -478,6 +509,13 @@ export function SuggestionsPanel({ rows, isEmpty }: SuggestionsPanelProps) {
                 ? `${s.contact_a_name} → ${s.contact_b_name}`
                 : (s.title?.trim() || "Suggestion");
               const subtitle = hasPair && s.title?.trim() ? s.title.trim() : null;
+              const subtitleClean = subtitle
+                ? stripWorkspaceMarkdownDecorators(subtitle)
+                : "";
+              const tierMeta =
+                typeof s.score === "number"
+                  ? suggestionTierMetaForRaw(s.score)
+                  : null;
               return (
                 <li
                   key={s.id}
@@ -496,15 +534,23 @@ export function SuggestionsPanel({ rows, isEmpty }: SuggestionsPanelProps) {
                           {KIND_LABEL[s.kind]}
                         </span>
                       ) : null}
-                      {typeof s.score === "number" ? (
-                        <span className="inline-flex items-center rounded-full border border-charcoal/10 bg-cream px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-charcoal-light">
-                          score {scoreOutOfFive(s.score)}/5
+                      {tierMeta ? (
+                        <span
+                          className="inline-flex max-w-full items-center rounded-full border border-charcoal/10 bg-cream px-2 py-0.5 text-[10px] font-medium tracking-wide text-charcoal-light"
+                          title={tierMeta.detail}
+                        >
+                          <span className="text-charcoal">
+                            {tierMeta.tier}/5
+                          </span>
+                          <span className="ml-1 normal-case opacity-90">
+                            {tierMeta.label}
+                          </span>
                         </span>
                       ) : null}
                     </div>
-                    {subtitle ? (
+                    {subtitleClean ? (
                       <p className="mt-1 text-xs text-charcoal-light/80">
-                        {subtitle}
+                        {subtitleClean}
                       </p>
                     ) : null}
                     {muted(s.body)}

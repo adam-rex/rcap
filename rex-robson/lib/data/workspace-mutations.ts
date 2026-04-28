@@ -11,7 +11,10 @@ import type {
   WorkspaceTaskStatus,
   WorkspaceTaskType,
 } from "@/lib/data/workspace-tasks.types";
-import { isLegacyMatchesWithoutIntroColumnsError } from "./supabase-error-guards";
+import {
+  isLegacyMatchesWithoutIntroColumnsError,
+  isMissingPipelineInternalWorkspaceColumnsError,
+} from "./supabase-error-guards";
 import {
   normalizeInternalComments,
   normalizeInternalTodos,
@@ -772,8 +775,9 @@ export async function countMatchTransactions(
 }
 
 /**
- * Revert an introduction: delete the opportunity row and put the suggestion back
- * to pending. Fails if any pipeline transactions exist for the pair.
+ * Revert an introduction: delete the opportunity row (cascades pipeline deals
+ * and Rex tasks scoped to the match). Linked suggestion becomes dismissed so
+ * it appears under Suggestions → Archived.
  */
 export async function undoMatchIntroduction(
   client: SupabaseClient,
@@ -782,7 +786,7 @@ export async function undoMatchIntroduction(
   | { ok: true }
   | {
       ok: false;
-      reason: "not_found" | "has_transactions" | "not_introduced";
+      reason: "not_found" | "not_introduced";
     }
 > {
   const match = await fetchWorkspaceMatchById(client, matchId);
@@ -790,13 +794,11 @@ export async function undoMatchIntroduction(
   if (match.stage !== "introduced") {
     return { ok: false, reason: "not_introduced" };
   }
-  const n = await countMatchTransactions(client, matchId);
-  if (n > 0) return { ok: false, reason: "has_transactions" };
 
   const { error: delErr } = await client.from("matches").delete().eq("id", matchId);
   if (delErr) throw delErr;
   if (match.suggestion_id) {
-    await updateWorkspaceSuggestionStatus(client, match.suggestion_id, "pending");
+    await updateWorkspaceSuggestionStatus(client, match.suggestion_id, "dismissed");
   }
   return { ok: true };
 }
@@ -813,8 +815,10 @@ export type CreatedMatchTransactionRow = {
   internal_todos: PipelineInternalTodo[];
 };
 
-const TX_SELECT =
+const TX_SELECT_FULL =
   "id,match_id,title,stage,outcome,context,notes,internal_comments,internal_todos";
+const TX_SELECT_LEGACY =
+  "id,match_id,title,stage,outcome,context,notes";
 
 function parsePipelineTxnStage(raw: unknown): PipelineTransactionStage {
   return raw === "closed" ? "closed" : "active";
@@ -857,22 +861,36 @@ export async function insertWorkspaceMatchTransaction(
       context: input.context ?? null,
       notes: input.notes ?? null,
     })
-    .select(TX_SELECT)
+    .select("id")
     .single();
   if (error) throw error;
-  if (!data) throw new Error("Insert returned no row");
-  return shapeMatchTransactionRow(data as Record<string, unknown>);
+  if (!data || typeof (data as { id?: unknown }).id !== "string") {
+    throw new Error("Insert returned no row");
+  }
+  const row = await fetchWorkspaceMatchTransactionById(
+    client,
+    String((data as { id: string }).id),
+  );
+  if (!row) throw new Error("Insert returned no row");
+  return row;
 }
 
 export async function fetchWorkspaceMatchTransactionById(
   client: SupabaseClient,
   id: string,
 ): Promise<CreatedMatchTransactionRow | null> {
-  const { data, error } = await client
+  let { data, error } = await client
     .from("match_transactions")
-    .select(TX_SELECT)
+    .select(TX_SELECT_FULL)
     .eq("id", id)
     .maybeSingle();
+  if (error && isMissingPipelineInternalWorkspaceColumnsError(error)) {
+    ({ data, error } = await client
+      .from("match_transactions")
+      .select(TX_SELECT_LEGACY)
+      .eq("id", id)
+      .maybeSingle());
+  }
   if (error) throw error;
   if (!data) return null;
   return shapeMatchTransactionRow(data as Record<string, unknown>);
@@ -892,20 +910,37 @@ export async function updateWorkspaceMatchTransaction(
   },
 ): Promise<CreatedMatchTransactionRow | null> {
   const outcome = input.stage === "closed" ? input.outcome : null;
-  const { data, error } = await client
+  const payloadFull = {
+    title: input.title,
+    stage: input.stage,
+    outcome,
+    context: input.context,
+    notes: input.notes,
+    internal_comments: input.internal_comments,
+    internal_todos: input.internal_todos,
+  };
+  const payloadLegacy = {
+    title: input.title,
+    stage: input.stage,
+    outcome,
+    context: input.context,
+    notes: input.notes,
+  };
+
+  let { data, error } = await client
     .from("match_transactions")
-    .update({
-      title: input.title,
-      stage: input.stage,
-      outcome,
-      context: input.context,
-      notes: input.notes,
-      internal_comments: input.internal_comments,
-      internal_todos: input.internal_todos,
-    })
+    .update(payloadFull)
     .eq("id", id)
-    .select(TX_SELECT)
+    .select(TX_SELECT_FULL)
     .maybeSingle();
+  if (error && isMissingPipelineInternalWorkspaceColumnsError(error)) {
+    ({ data, error } = await client
+      .from("match_transactions")
+      .update(payloadLegacy)
+      .eq("id", id)
+      .select(TX_SELECT_LEGACY)
+      .maybeSingle());
+  }
   if (error) throw error;
   if (!data) return null;
   return shapeMatchTransactionRow(data as Record<string, unknown>);

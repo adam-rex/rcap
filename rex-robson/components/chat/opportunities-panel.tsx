@@ -4,6 +4,7 @@ import { Handshake, Pencil, Plus, RotateCcw, Sparkles } from "lucide-react";
 import type { FormEvent } from "react";
 import { useCallback, useEffect, useState } from "react";
 import type { MatchKind } from "@/lib/data/workspace-matches-page.types";
+import { stripWorkspaceMarkdownDecorators } from "@/lib/format/workspace-display-text";
 import type { WorkspaceOpportunityRow } from "@/lib/data/workspace-opportunities-page";
 import type { WorkspaceContactPageRow } from "@/lib/data/workspace-contacts.types";
 import {
@@ -268,7 +269,9 @@ export function OpportunitiesPanel() {
         setError(data.error ?? "Could not undo introduction.");
         return;
       }
-      setToast("Introduction reverted — suggestion is live again if it came from Rex.");
+      setToast(
+        "Introduction removed. Linked suggestion is in Suggestions → Archived.",
+      );
       await load();
     } catch {
       setError("Network error.");
@@ -334,40 +337,66 @@ export function OpportunitiesPanel() {
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-charcoal/[0.08] bg-cream-light/40">
           <ul className="divide-y divide-charcoal/[0.06]">
-            {rows.map((o) => (
-              <li
-                key={o.id}
-                className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-start sm:justify-between"
-              >
+            {rows.map((o) => {
+              const introClean = o.introduction_notes
+                ? stripWorkspaceMarkdownDecorators(o.introduction_notes)
+                : "";
+              const contextClean = o.context
+                ? stripWorkspaceMarkdownDecorators(o.context)
+                : "";
+              return (
+                <li
+                  key={o.id}
+                  className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-start sm:justify-between"
+                >
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-charcoal">
                     {o.contact_a_name}{" "}
                     <span className="text-charcoal-light/70">↔</span>{" "}
                     {o.contact_b_name}
                   </p>
-                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                    <span className="inline-flex items-center rounded-full border border-charcoal/15 bg-charcoal/5 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-charcoal">
-                      {KIND_LABEL[o.kind]}
-                    </span>
-                    <span className="inline-flex items-center gap-1 rounded-full border border-charcoal/10 bg-cream px-2 py-0.5 text-[10px] font-medium text-charcoal-light">
-                      <Sparkles className="size-3" aria-hidden />
-                      {o.transaction_count} deal
-                      {o.transaction_count === 1 ? "" : "s"} on pipeline
-                    </span>
-                  </div>
-                  <p className="mt-1 text-[11px] text-charcoal-light/80">
-                    Introduced {formatIntroAt(o.introduction_at)}
-                  </p>
-                  {o.introduction_notes ? (
-                    <p className="mt-1 text-xs text-charcoal-light/85">
-                      {o.introduction_notes}
-                    </p>
-                  ) : null}
-                  {o.context ? (
-                    <p className="mt-2 line-clamp-3 text-xs text-charcoal-light/80">
-                      {o.context}
-                    </p>
-                  ) : null}
+                  <ul className="mt-2 list-outside list-disc space-y-1.5 pl-[1.15rem] text-[11px] leading-snug text-charcoal-light/88 marker:text-charcoal/35">
+                    <li>
+                      <span className="text-charcoal/90">{KIND_LABEL[o.kind]}</span>
+                    </li>
+                    <li>
+                      <span className="inline-flex items-center gap-1">
+                        <Sparkles
+                          className="size-3 shrink-0 text-charcoal/40"
+                          strokeWidth={1.75}
+                          aria-hidden
+                        />
+                        <span>
+                          {o.transaction_count} deal
+                          {o.transaction_count === 1 ? "" : "s"} on pipeline
+                        </span>
+                      </span>
+                    </li>
+                    <li>
+                      <span className="text-charcoal-light/75">Introduced</span>{" "}
+                      {formatIntroAt(o.introduction_at)}
+                    </li>
+                    {introClean ? (
+                      <li className="text-charcoal-light/90">
+                        <span className="font-medium text-charcoal/80">
+                          Intro notes
+                        </span>
+                        <span className="mt-0.5 block whitespace-pre-wrap pl-0 text-[11px] font-normal leading-relaxed text-charcoal-light/88">
+                          {introClean}
+                        </span>
+                      </li>
+                    ) : null}
+                    {contextClean ? (
+                      <li className="text-charcoal-light/90">
+                        <span className="font-medium text-charcoal/80">
+                          Why they fit
+                        </span>
+                        <span className="mt-0.5 block whitespace-pre-wrap pl-0 text-[11px] font-normal leading-relaxed text-charcoal-light/85">
+                          {contextClean}
+                        </span>
+                      </li>
+                    ) : null}
+                  </ul>
                 </div>
                 <div className="flex shrink-0 flex-wrap items-center gap-1.5">
                   <button
@@ -388,23 +417,18 @@ export function OpportunitiesPanel() {
                   </button>
                   <button
                     type="button"
-                    disabled={
-                      pendingUndo === o.id || o.transaction_count > 0
-                    }
+                    disabled={pendingUndo !== null}
                     onClick={() => void onUndo(o.id)}
-                    title={
-                      o.transaction_count > 0
-                        ? "Remove pipeline deals first"
-                        : "Undo introduction"
-                    }
+                    title="Remove this introduction and archive the Rex suggestion if there was one. Pipeline deals for this intro are removed too."
                     className="inline-flex items-center gap-1 rounded-lg border border-charcoal/12 bg-cream-light/60 px-2.5 py-1.5 text-[11px] font-medium text-charcoal-light transition-colors hover:border-red-400/40 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <RotateCcw className="size-3.5" aria-hidden />
                     Undo
                   </button>
                 </div>
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}

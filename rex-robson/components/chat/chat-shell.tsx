@@ -2,11 +2,8 @@
 
 import { Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
-import {
-  ZERO_DASHBOARD_METRICS,
-  type DashboardMetrics,
-} from "@/lib/data/dashboard-metrics.types";
+import { useCallback, useState } from "react";
+import type { DashboardMetrics } from "@/lib/data/dashboard-metrics.types";
 import type { WorkspaceLists } from "@/lib/data/workspace-lists";
 import type { RexDashboardStats } from "@/lib/rex/voice";
 import { ChatComposer } from "./chat-composer";
@@ -14,9 +11,7 @@ import { ChatMessageList, type ChatMessage } from "./chat-message-list";
 import {
   chatNavLabel,
   MOBILE_SHELL_BOTTOM_PAD_CLASS,
-  workspaceModeButtonClass,
   type ChatNavId,
-  type WorkspaceDisplayMode,
 } from "./chat-nav-config";
 import { ChatMobileNav } from "./chat-mobile-nav";
 import { ChatSidebar } from "./chat-sidebar";
@@ -29,23 +24,6 @@ import { PipelinePanel } from "./pipeline-panel";
 import { QuickCaptureDialog } from "./quick-capture-dialog";
 import { QuickCaptureFab } from "./quick-capture-fab";
 import { SuggestionsPanel } from "./suggestions-panel";
-
-const WORKSPACE_DISPLAY_KEY = "rex-workspace-display";
-
-const ZERO_STATS: RexDashboardStats = {
-  contactCount: 0,
-  organisationCount: 0,
-  openMatchCount: 0,
-  activeMatchCount: 0,
-  suggestionsPendingCount: 0,
-  suggestionTotalCount: 0,
-};
-
-const EMPTY_WORKSPACE: WorkspaceLists = {
-  organisations: [],
-  matches: [],
-  suggestions: [],
-};
 
 type ChatShellProps = {
   openingGreeting: string;
@@ -65,8 +43,6 @@ export function ChatShell({
     { id: "rex-open", role: "rex", text: openingGreeting },
   ]);
   const [searchBusy, setSearchBusy] = useState(false);
-  const [workspaceDisplayMode, setWorkspaceDisplayMode] =
-    useState<WorkspaceDisplayMode>("live");
   const [pendingContactsAutoCreate, setPendingContactsAutoCreate] =
     useState(false);
   const [quickCaptureOpen, setQuickCaptureOpen] = useState(false);
@@ -108,33 +84,6 @@ export function ChatShell({
   const onPendingEmailDetailHandled = useCallback(() => {
     setPendingEmailDetailId(null);
   }, []);
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(WORKSPACE_DISPLAY_KEY);
-      if (raw === "empty" || raw === "live") {
-        setWorkspaceDisplayMode(raw);
-      }
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
-  const persistWorkspaceDisplayMode = useCallback((mode: WorkspaceDisplayMode) => {
-    setWorkspaceDisplayMode(mode);
-    try {
-      localStorage.setItem(WORKSPACE_DISPLAY_KEY, mode);
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
-  const effectiveStats =
-    workspaceDisplayMode === "empty" ? ZERO_STATS : stats;
-  const effectiveWorkspace =
-    workspaceDisplayMode === "empty" ? EMPTY_WORKSPACE : workspace;
-  const effectiveMetrics =
-    workspaceDisplayMode === "empty" ? ZERO_DASHBOARD_METRICS : metrics;
 
   const onSubmitSearch = useCallback(async (query: string, files: File[]) => {
     const userId =
@@ -217,12 +166,7 @@ export function ChatShell({
 
   return (
     <div className="flex min-h-0 h-dvh max-h-dvh flex-1 overflow-hidden bg-cream pt-[env(safe-area-inset-top,0px)]">
-      <ChatSidebar
-        activeId={activeNav}
-        onNavigate={setActiveNav}
-        workspaceDisplayMode={workspaceDisplayMode}
-        onWorkspaceDisplayModeChange={persistWorkspaceDisplayMode}
-      />
+      <ChatSidebar activeId={activeNav} onNavigate={setActiveNav} />
       <div
         className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden lg:pb-0 ${MOBILE_SHELL_BOTTOM_PAD_CLASS}`}
       >
@@ -262,36 +206,6 @@ export function ChatShell({
               <Plus className="size-5" strokeWidth={2.25} aria-hidden />
             </button>
           ) : null}
-          <div
-            className="flex max-w-[min(100%,11rem)] shrink-0 flex-col gap-1 lg:hidden"
-            role="presentation"
-          >
-            <p className="text-[9px] font-medium uppercase tracking-wide text-charcoal-light/70">
-              Workspace
-            </p>
-            <div
-              className="flex rounded-lg bg-charcoal/[0.05] p-0.5"
-              role="group"
-              aria-label="Workspace display mode"
-            >
-              <button
-                type="button"
-                className={workspaceModeButtonClass(workspaceDisplayMode === "live")}
-                onClick={() => persistWorkspaceDisplayMode("live")}
-              >
-                Live
-              </button>
-              <button
-                type="button"
-                className={workspaceModeButtonClass(
-                  workspaceDisplayMode === "empty",
-                )}
-                onClick={() => persistWorkspaceDisplayMode("empty")}
-              >
-                Empty
-              </button>
-            </div>
-          </div>
         </header>
         <main
           className={
@@ -302,7 +216,7 @@ export function ChatShell({
         >
           {activeNav === "dashboard" ? (
             <DashboardPanel
-              metrics={effectiveMetrics}
+              metrics={metrics}
               onAddContact={onAddContactFromDashboard}
               onOpenQuickCapture={onOpenQuickCapture}
               onOpenSuggestions={() => setActiveNav("suggestions")}
@@ -333,8 +247,8 @@ export function ChatShell({
             <PipelinePanel />
           ) : activeNav === "suggestions" ? (
             <SuggestionsPanel
-              rows={effectiveWorkspace.suggestions}
-              isEmpty={effectiveStats.suggestionsPendingCount === 0}
+              rows={workspace.suggestions}
+              isEmpty={stats.suggestionsPendingCount === 0}
             />
           ) : activeNav === "opportunities" ? (
             <OpportunitiesPanel />

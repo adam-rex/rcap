@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { insertWorkspaceSuggestion } from "@/lib/data/workspace-mutations";
 
+/** Minimum raw `scorePair()` total for a pair to surface as a suggestion (see `@/lib/match/suggestion-score` for 1–5 tiers). */
 const MIN_SCORE = 5;
 const PER_FOUNDER_CAP = 4;
 const PER_CAPITAL_CAP = 3;
@@ -125,6 +126,10 @@ function formatGbp(n: number): string {
   return `£${Math.round(n).toLocaleString()}`;
 }
 
+/**
+ * Heuristic match strength (integer). Persisted as `suggestions.score` and shown
+ * in the UI as match-fit tiers via `@/lib/match/suggestion-score`.
+ */
 function scorePair(
   founder: ContactForMatch,
   capital: ContactForMatch,

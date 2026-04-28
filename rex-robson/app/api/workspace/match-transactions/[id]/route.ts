@@ -13,6 +13,10 @@ import {
   normalizeInternalTodos,
 } from "@/lib/data/workspace-matches-page";
 import type { WorkspacePipelineTransactionRow } from "@/lib/data/workspace-matches-page.types";
+import {
+  isMissingPipelineInternalWorkspaceColumnsError,
+  supabaseErrorSummary,
+} from "@/lib/data/supabase-error-guards";
 
 export const runtime = "nodejs";
 
@@ -74,17 +78,29 @@ export async function GET(_req: Request, context: RouteContext) {
     const userScoped = await createServerSupabaseClient();
     const client = service ?? userScoped;
 
-    const select =
+    const selectFull =
       "id,match_id,title,stage,outcome,context,notes,internal_comments,internal_todos," +
       "match:matches!inner(contact_a_id,contact_b_id,kind," +
       "contact_a:contacts!matches_contact_a_id_fkey(name)," +
       "contact_b:contacts!matches_contact_b_id_fkey(name))";
+    const selectLegacy =
+      "id,match_id,title,stage,outcome,context,notes," +
+      "match:matches!inner(contact_a_id,contact_b_id,kind," +
+      "contact_a:contacts!matches_contact_a_id_fkey(name)," +
+      "contact_b:contacts!matches_contact_b_id_fkey(name))";
 
-    const { data, error } = await client
+    let { data, error } = await client
       .from("match_transactions")
-      .select(select)
+      .select(selectFull)
       .eq("id", id)
       .maybeSingle();
+    if (error && isMissingPipelineInternalWorkspaceColumnsError(error)) {
+      ({ data, error } = await client
+        .from("match_transactions")
+        .select(selectLegacy)
+        .eq("id", id)
+        .maybeSingle());
+    }
     if (error) throw error;
     const row = data ? shapeDetail(data as unknown as RawTxnDetail) : null;
     if (!row) {
@@ -92,11 +108,11 @@ export async function GET(_req: Request, context: RouteContext) {
     }
     return NextResponse.json({ ...row, stageHistory: [] as unknown[] });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Query failed";
+    const message = supabaseErrorSummary(e);
     if (process.env.NODE_ENV === "development") {
       console.error("[rex-robson] GET /api/workspace/match-transactions/[id]:", e);
     }
-    return NextResponse.json({ error: message }, { status: 503 });
+    return NextResponse.json({ error: message || "Query failed" }, { status: 503 });
   }
 }
 
@@ -153,13 +169,16 @@ export async function PATCH(req: Request, context: RouteContext) {
     }
     return NextResponse.json(row);
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Update failed";
+    const message = supabaseErrorSummary(e);
     if (process.env.NODE_ENV === "development") {
       console.error(
         "[rex-robson] PATCH /api/workspace/match-transactions/[id]:",
         e,
       );
     }
-    return NextResponse.json({ error: message }, { status: 503 });
+    return NextResponse.json(
+      { error: message || "Update failed" },
+      { status: 503 },
+    );
   }
 }

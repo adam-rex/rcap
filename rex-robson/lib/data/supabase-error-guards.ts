@@ -21,6 +21,18 @@ export function isLegacyMatchesWithoutIntroColumnsError(error: unknown): boolean
   );
 }
 
+/** Pipeline JSONB columns from `20260427160000_match_transactions_internal_workspace.sql` not applied. */
+export function isMissingPipelineInternalWorkspaceColumnsError(
+  error: unknown,
+): boolean {
+  if (!isUndefinedColumnError(error)) return false;
+  const blob = supabaseErrorSummary(error).toLowerCase();
+  return (
+    blob.includes("internal_comments") ||
+    blob.includes("internal_todos")
+  );
+}
+
 export function isMissingMatchTransactionsError(error: unknown): boolean {
   if (error == null || typeof error !== "object") return false;
   const rec = error as {

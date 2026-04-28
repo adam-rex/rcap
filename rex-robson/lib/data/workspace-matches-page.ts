@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { tryCreateServiceRoleClient } from "@/lib/supabase/service-role";
+import { isMissingPipelineInternalWorkspaceColumnsError } from "./supabase-error-guards";
 import {
   WORKSPACE_MATCHES_PAGE_SIZE_MAX,
   type MatchKind,
@@ -128,27 +129,41 @@ export async function fetchWorkspaceMatchesPageWithClient(
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
 
-  const select =
-    "id,match_id,title,stage,outcome,context,notes,internal_comments,internal_todos," +
+  const matchEmbed =
     "match:matches!inner(contact_a_id,contact_b_id,kind," +
     "contact_a:contacts!matches_contact_a_id_fkey(name)," +
     "contact_b:contacts!matches_contact_b_id_fkey(name))";
 
-  let query = client
-    .from("match_transactions")
-    .select(select, { count: "exact" })
-    .order("updated_at", { ascending: false })
-    .range(from, to);
+  const selectFull =
+    "id,match_id,title,stage,outcome,context,notes,internal_comments,internal_todos," +
+    matchEmbed;
+  const selectLegacy =
+    "id,match_id,title,stage,outcome,context,notes," + matchEmbed;
 
   const q = (params.search ?? "").trim();
-  if (q.length > 0) {
-    const escaped = q.replace(/[%_]/g, (ch) => `\\${ch}`);
-    query = query.or(
-      `title.ilike.%${escaped}%,context.ilike.%${escaped}%,notes.ilike.%${escaped}%,internal_comments::text.ilike.%${escaped}%,internal_todos::text.ilike.%${escaped}%`,
-    );
-  }
 
-  const { data, error, count } = await query;
+  const buildQuery = (select: string) => {
+    let qb = client
+      .from("match_transactions")
+      .select(select, { count: "exact" })
+      .order("updated_at", { ascending: false })
+      .range(from, to);
+    if (q.length > 0) {
+      const escaped = q.replace(/[%_]/g, (ch) => `\\${ch}`);
+      // PostgREST .or() only accepts real columns — no `::text` casts. JSONB
+      // “team workspace” text is matched in the in-memory filter below.
+      qb = qb.or(
+        `title.ilike.%${escaped}%,context.ilike.%${escaped}%,notes.ilike.%${escaped}%`,
+      );
+    }
+    return qb;
+  };
+
+  let first = await buildQuery(selectFull);
+  if (first.error && isMissingPipelineInternalWorkspaceColumnsError(first.error)) {
+    first = await buildQuery(selectLegacy);
+  }
+  const { data, error, count } = first;
   if (error) throw error;
 
   const rows = (data ?? [])

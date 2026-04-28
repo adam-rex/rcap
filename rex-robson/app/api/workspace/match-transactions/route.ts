@@ -9,6 +9,7 @@ import {
   WORKSPACE_MATCHES_PAGE_SIZE_DEFAULT,
   WORKSPACE_MATCHES_PAGE_SIZE_MAX,
 } from "@/lib/data/workspace-matches-page";
+import { supabaseErrorSummary } from "@/lib/data/supabase-error-guards";
 import {
   fetchWorkspaceMatchById,
   getWorkspaceWriteClient,
@@ -46,11 +47,21 @@ export async function GET(req: Request) {
     const result = await getWorkspaceMatchesPage({ search, page, pageSize });
     return NextResponse.json(result);
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Query failed";
+    const message = supabaseErrorSummary(e);
     if (process.env.NODE_ENV === "development") {
       console.error("[rex-robson] GET /api/workspace/match-transactions:", e);
     }
-    return NextResponse.json({ error: message }, { status: 503 });
+    return NextResponse.json(
+      {
+        error: message || "Query failed",
+        hint:
+          message.includes("internal_comments") ||
+          message.includes("internal_todos")
+            ? "Apply Supabase migrations (e.g. 20260427160000_match_transactions_internal_workspace.sql) or run `supabase db push`."
+            : undefined,
+      },
+      { status: 503 },
+    );
   }
 }
 

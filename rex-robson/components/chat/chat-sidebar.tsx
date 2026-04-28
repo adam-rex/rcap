@@ -1,26 +1,17 @@
 "use client";
 
-import {
-  CHAT_NAV_ITEMS,
-  workspaceModeButtonClass,
-  type ChatNavId,
-  type WorkspaceDisplayMode,
-} from "./chat-nav-config";
+import { CHAT_NAV_ITEMS, type ChatNavId } from "./chat-nav-config";
 
-export type { ChatNavId, WorkspaceDisplayMode } from "./chat-nav-config";
+export type { ChatNavId } from "./chat-nav-config";
 
 type ChatSidebarProps = {
   activeId?: ChatNavId;
   onNavigate?: (id: ChatNavId) => void;
-  workspaceDisplayMode?: WorkspaceDisplayMode;
-  onWorkspaceDisplayModeChange?: (mode: WorkspaceDisplayMode) => void;
 };
 
 export function ChatSidebar({
   activeId = "dashboard",
   onNavigate,
-  workspaceDisplayMode = "live",
-  onWorkspaceDisplayModeChange,
 }: ChatSidebarProps) {
   return (
     <aside className="hidden h-full min-h-0 w-56 shrink-0 flex-col overflow-hidden border-r border-charcoal/[0.08] bg-cream-light/80 backdrop-blur-sm lg:flex">
@@ -58,34 +49,6 @@ export function ChatSidebar({
           );
         })}
       </nav>
-      <div className="shrink-0 border-t border-charcoal/[0.06] p-2">
-        <p className="mb-1.5 px-2 text-[10px] font-medium uppercase tracking-wide text-charcoal-light/70">
-          Workspace display
-        </p>
-        <div
-          className="flex rounded-lg bg-charcoal/[0.05] p-0.5"
-          role="group"
-          aria-label="Workspace display mode"
-        >
-          <button
-            type="button"
-            className={workspaceModeButtonClass(workspaceDisplayMode === "live")}
-            onClick={() => onWorkspaceDisplayModeChange?.("live")}
-          >
-            Live data
-          </button>
-          <button
-            type="button"
-            className={workspaceModeButtonClass(workspaceDisplayMode === "empty")}
-            onClick={() => onWorkspaceDisplayModeChange?.("empty")}
-          >
-            Empty
-          </button>
-        </div>
-        <p className="mt-1.5 px-2 text-[10px] leading-snug text-charcoal-light/65">
-          Empty previews the zero-state copy even when the database has rows.
-        </p>
-      </div>
     </aside>
   );
 }
