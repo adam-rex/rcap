@@ -2,14 +2,10 @@
 
 import {
   ArrowLeft,
-  Building2,
   Download,
   FileText,
-  Globe2,
-  Mail,
-  MapPin,
+  MessageSquare,
   Pencil,
-  Phone,
   Plus,
   Tag,
   Trash2,
@@ -17,8 +13,19 @@ import {
   UserCircle2,
   X,
 } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { WorkspaceContactPageRow } from "@/lib/data/workspace-contacts.types";
+import {
+  INTERNAL_CONTACT_OWNERS,
+  isInternalContactOwner,
+} from "@/lib/constants/internal-contact-owners";
+import { HOME_CONTACTS_HREF } from "@/components/chat/chat-nav-config";
+import {
+  WORKSPACE_FORM_BTN_PRIMARY,
+  WORKSPACE_FORM_INPUT_CLASS,
+  WORKSPACE_FORM_LABEL_CLASS,
+} from "./workspace-create-dialog";
 
 type ContactDetail = {
   phone: string | null;
@@ -43,6 +50,12 @@ type ContactDocumentApiRow = {
   created_at: string;
 };
 
+type ContactComment = {
+  id: string;
+  body: string;
+  createdAt: string;
+};
+
 function formatBytes(n: number | null): string {
   if (n == null || !Number.isFinite(n) || n <= 0) return "";
   if (n < 1024) return `${n} B`;
@@ -51,9 +64,13 @@ function formatBytes(n: number | null): string {
   return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
-type ContactDetailViewProps = {
+export type ContactDetailViewProps = {
   contact: WorkspaceContactPageRow;
+  /** When provided, seeds phone/email/notes before the first fetch completes. */
+  prefetchedFields?: Pick<ContactDetail, "phone" | "email" | "notes"> | null;
   refreshTick: number;
+  /** Full-page layout vs inline panel in Rex shell. */
+  layout?: "panel" | "page";
   onBack: () => void;
   onEdit: () => void;
   onAdd: () => void;
@@ -81,51 +98,73 @@ function formatDate(iso: string | null): string {
   });
 }
 
-type InfoRowProps = {
-  icon: React.ReactNode;
+function formatDateTime(iso: string): string {
+  const ts = Date.parse(iso);
+  if (!Number.isFinite(ts)) return "—";
+  return new Date(ts).toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+/** Single compact label : value for the header strip */
+function MetaItem({
+  label,
+  value,
+  href,
+}: {
   label: string;
   value: string | null | undefined;
   href?: string;
-};
-
-function InfoRow({ icon, label, value, href }: InfoRowProps) {
+}) {
   const display = value && value.trim().length > 0 ? value : null;
+  if (display == null && !href) return null;
   return (
-    <div className="flex items-start gap-3 rounded-lg border border-charcoal/[0.08] bg-cream-light/40 px-4 py-3">
-      <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-charcoal/[0.06] text-charcoal-light">
-        {icon}
+    <div className="flex min-w-0 flex-col gap-0.5">
+      <span className="text-[10px] font-semibold uppercase tracking-wide text-charcoal-light/75">
+        {label}
       </span>
-      <div className="min-w-0 flex-1">
-        <p className="text-[11px] font-medium uppercase tracking-wide text-charcoal-light/80">
-          {label}
-        </p>
-        {display == null ? (
-          <p className="mt-0.5 text-sm text-charcoal-light/60">—</p>
-        ) : href ? (
-          <a
-            href={href}
-            className="mt-0.5 block break-words text-sm text-charcoal underline-offset-2 hover:underline"
-          >
-            {display}
-          </a>
-        ) : (
-          <p className="mt-0.5 break-words text-sm text-charcoal">{display}</p>
-        )}
-      </div>
+      {href && display ? (
+        <a
+          href={href}
+          className="truncate text-xs text-charcoal underline-offset-2 hover:underline"
+        >
+          {display}
+        </a>
+      ) : (
+        <span className="truncate text-xs text-charcoal">
+          {display ?? "—"}
+        </span>
+      )}
     </div>
   );
 }
 
 export function ContactDetailView({
   contact,
+  prefetchedFields,
   refreshTick,
+  layout = "panel",
   onBack,
   onEdit,
   onAdd,
   onDeleted,
 }: ContactDetailViewProps) {
-  const [detail, setDetail] = useState<ContactDetail | null>(null);
-  const [loading, setLoading] = useState(true);
+  const isPage = layout === "page";
+  const [detail, setDetail] = useState<ContactDetail | null>(() =>
+    prefetchedFields
+      ? {
+          phone: prefetchedFields.phone,
+          email: prefetchedFields.email,
+          notes: prefetchedFields.notes,
+          organisationId: contact.organisation_id,
+        }
+      : null,
+  );
+  const [loading, setLoading] = useState(!prefetchedFields);
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -136,6 +175,19 @@ export function ContactDetailView({
   const [uploading, setUploading] = useState(false);
   const [removingDocId, setRemovingDocId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const [notesDraft, setNotesDraft] = useState(
+    prefetchedFields?.notes ?? "",
+  );
+  const [notesSaving, setNotesSaving] = useState(false);
+  const [notesSaveError, setNotesSaveError] = useState<string | null>(null);
+  const [notesDirty, setNotesDirty] = useState(false);
+
+  const [comments, setComments] = useState<ContactComment[]>([]);
+  const [commentsLoading, setCommentsLoading] = useState(true);
+  const [commentsError, setCommentsError] = useState<string | null>(null);
+  const [newComment, setNewComment] = useState("");
+  const [postingComment, setPostingComment] = useState(false);
 
   const loadDocuments = async (signal?: AbortSignal) => {
     setDocsLoading(true);
@@ -176,6 +228,39 @@ export function ContactDetailView({
       setDocuments([]);
     } finally {
       if (!signal?.aborted) setDocsLoading(false);
+    }
+  };
+
+  const loadComments = async (signal?: AbortSignal) => {
+    setCommentsLoading(true);
+    setCommentsError(null);
+    try {
+      const res = await fetch(`/api/workspace/contacts/${contact.id}/comments`, {
+        signal,
+      });
+      const data = (await res.json()) as {
+        rows?: { id: string; body: string; createdAt: string }[];
+        error?: string;
+      };
+      if (signal?.aborted) return;
+      if (!res.ok) {
+        setCommentsError(data.error ?? "Could not load comments.");
+        setComments([]);
+        return;
+      }
+      setComments(
+        (data.rows ?? []).map((r) => ({
+          id: r.id,
+          body: r.body,
+          createdAt: r.createdAt,
+        })),
+      );
+    } catch (err) {
+      if ((err as { name?: string })?.name === "AbortError") return;
+      setCommentsError("Network error while loading comments.");
+      setComments([]);
+    } finally {
+      if (!signal?.aborted) setCommentsLoading(false);
     }
   };
 
@@ -307,6 +392,8 @@ export function ContactDetailView({
           notes: data.notes ?? null,
           organisationId: data.organisationId ?? null,
         });
+        setNotesDraft(data.notes ?? "");
+        setNotesDirty(false);
       } catch {
         if (!cancelled) {
           setError("Network error while loading contact.");
@@ -330,285 +417,482 @@ export function ContactDetailView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contact.id, refreshTick]);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    void loadComments(controller.signal);
+    return () => {
+      controller.abort();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contact.id, refreshTick]);
+
+  const saveNotes = async () => {
+    if (notesSaving || loading) return;
+    setNotesSaving(true);
+    setNotesSaveError(null);
+    try {
+      const res = await fetch(`/api/workspace/contacts/${contact.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: contact.name,
+          contactType: contact.contact_type ?? "",
+          sector: contact.sector ?? "",
+          organisationId: contact.organisation_id,
+          role: contact.role,
+          geography: contact.geography,
+          phone: detail?.phone ?? null,
+          email: detail?.email ?? null,
+          notes: notesDraft.trim() === "" ? null : notesDraft.trim(),
+          internalOwner:
+            contact.internal_owner == null ||
+            contact.internal_owner.trim() === ""
+              ? null
+              : isInternalContactOwner(contact.internal_owner)
+                ? contact.internal_owner
+                : INTERNAL_CONTACT_OWNERS[0],
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        hint?: string;
+      };
+      if (!res.ok) {
+        const parts = [data.error, data.hint].filter(
+          (x): x is string => typeof x === "string" && x.length > 0,
+        );
+        setNotesSaveError(
+          parts.length > 0 ? parts.join(" ") : "Could not save notes.",
+        );
+        return;
+      }
+      setDetail((d) =>
+        d ? { ...d, notes: notesDraft.trim() === "" ? null : notesDraft.trim() } : d,
+      );
+      setNotesDirty(false);
+    } catch {
+      setNotesSaveError("Network error while saving notes.");
+    } finally {
+      setNotesSaving(false);
+    }
+  };
+
+  const postComment = async () => {
+    const body = newComment.trim();
+    if (body === "" || postingComment) return;
+    setPostingComment(true);
+    setCommentsError(null);
+    try {
+      const res = await fetch(`/api/workspace/contacts/${contact.id}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        id?: string;
+        createdAt?: string;
+      };
+      if (!res.ok) {
+        setCommentsError(data.error ?? "Could not post comment.");
+        return;
+      }
+      if (data.id && data.createdAt != null) {
+        setComments((prev) => [
+          {
+            id: data.id!,
+            body,
+            createdAt: String(data.createdAt),
+          },
+          ...prev,
+        ]);
+      }
+      setNewComment("");
+    } catch {
+      setCommentsError("Network error while posting comment.");
+    } finally {
+      setPostingComment(false);
+    }
+  };
+
   const subline = [contact.role, contact.organisation_name, contact.geography]
     .filter((x): x is string => typeof x === "string" && x.length > 0)
     .join(" · ");
 
+  const shellClass = isPage
+    ? "min-h-dvh w-full bg-cream pb-10 pt-[env(safe-area-inset-top,0px)]"
+    : "flex flex-col";
+
+  const innerClass = isPage
+    ? "mx-auto w-full max-w-5xl px-4 py-6 sm:px-8"
+    : "flex flex-col px-4 py-6 sm:px-8";
+
+  const BackControl = isPage ? (
+    <Link
+      href={HOME_CONTACTS_HREF}
+      className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-charcoal-light transition-colors hover:bg-charcoal/5 hover:text-charcoal"
+    >
+      <ArrowLeft className="size-3.5" strokeWidth={1.75} aria-hidden />
+      Contacts
+    </Link>
+  ) : (
+    <button
+      type="button"
+      onClick={onBack}
+      className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-charcoal-light transition-colors hover:bg-charcoal/5 hover:text-charcoal"
+    >
+      <ArrowLeft className="size-3.5" strokeWidth={1.75} aria-hidden />
+      Contacts
+    </button>
+  );
+
   return (
-    <div className="flex flex-col px-4 py-6 sm:px-8">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <button
-          type="button"
-          onClick={onBack}
-          className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-charcoal-light transition-colors hover:bg-charcoal/5 hover:text-charcoal"
-        >
-          <ArrowLeft className="size-3.5" strokeWidth={1.75} aria-hidden />
-          Contacts
-        </button>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={onAdd}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-charcoal px-3 py-2 text-xs font-medium text-cream transition-colors hover:bg-charcoal/90"
-          >
-            <Plus className="size-3.5" aria-hidden />
-            Add contact
-          </button>
-          <button
-            type="button"
-            onClick={onEdit}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-charcoal/15 bg-cream px-3 py-2 text-xs font-medium text-charcoal transition-colors hover:bg-cream-light"
-          >
-            <Pencil className="size-3.5" aria-hidden />
-            Edit contact
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleDelete()}
-            disabled={deleting}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-red-700/20 bg-cream px-3 py-2 text-xs font-medium text-red-700 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <Trash2 className="size-3.5" aria-hidden />
-            {deleting ? "Deleting…" : "Delete contact"}
-          </button>
-        </div>
-      </div>
-
-      {deleteError ? (
-        <p className="mt-3 text-sm text-red-700/90" role="alert">
-          {deleteError}
-        </p>
-      ) : null}
-
-      <div className="mt-4 flex items-center gap-4 rounded-xl border border-charcoal/[0.08] bg-cream-light/60 p-5">
-        <div className="flex size-14 shrink-0 items-center justify-center rounded-full bg-sky-100 text-sm font-semibold text-sky-800">
-          {initials(contact.name)}
-        </div>
-        <div className="min-w-0 flex-1">
-          <h2 className="truncate font-serif text-2xl tracking-tight text-charcoal">
-            {contact.name}
-          </h2>
-          {subline ? (
-            <p className="mt-1 truncate text-sm text-charcoal-light/90">
-              {subline}
-            </p>
-          ) : null}
-          {contact.organisation_type ? (
-            <span className="mt-2 inline-block rounded-full border border-charcoal/10 bg-cream-light px-2 py-0.5 text-xs text-charcoal-light">
-              {contact.organisation_type}
-            </span>
-          ) : null}
-        </div>
-      </div>
-
-      {error ? (
-        <p className="mt-4 text-sm text-red-700/90" role="alert">
-          {error}
-        </p>
-      ) : null}
-
-      <section className="mt-6">
-        <h3 className="text-[11px] font-bold uppercase tracking-wider text-charcoal-light">
-          Overview
-        </h3>
-        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <InfoRow
-            icon={<Tag className="size-3.5" strokeWidth={1.75} aria-hidden />}
-            label="Contact type"
-            value={contact.contact_type}
-          />
-          <InfoRow
-            icon={<Tag className="size-3.5" strokeWidth={1.75} aria-hidden />}
-            label="Sector"
-            value={contact.sector}
-          />
-          <InfoRow
-            icon={
-              <UserCircle2 className="size-3.5" strokeWidth={1.75} aria-hidden />
-            }
-            label="Rex team (internal)"
-            value={contact.internal_owner}
-          />
-          <InfoRow
-            icon={
-              <Building2 className="size-3.5" strokeWidth={1.75} aria-hidden />
-            }
-            label="Organisation"
-            value={contact.organisation_name}
-          />
-          <InfoRow
-            icon={
-              <UserCircle2 className="size-3.5" strokeWidth={1.75} aria-hidden />
-            }
-            label="Role"
-            value={contact.role}
-          />
-          <InfoRow
-            icon={
-              <MapPin className="size-3.5" strokeWidth={1.75} aria-hidden />
-            }
-            label="Geography"
-            value={contact.geography}
-          />
-          <InfoRow
-            icon={
-              <Globe2 className="size-3.5" strokeWidth={1.75} aria-hidden />
-            }
-            label="Last contact"
-            value={formatDate(contact.last_contact_date)}
-          />
-          <InfoRow
-            icon={<Phone className="size-3.5" strokeWidth={1.75} aria-hidden />}
-            label="Phone"
-            value={loading ? "…" : detail?.phone ?? null}
-            href={
-              !loading && detail?.phone
-                ? `tel:${detail.phone.replace(/\s+/g, "")}`
-                : undefined
-            }
-          />
-          <InfoRow
-            icon={<Mail className="size-3.5" strokeWidth={1.75} aria-hidden />}
-            label="Email"
-            value={loading ? "…" : detail?.email ?? null}
-            href={
-              !loading && detail?.email ? `mailto:${detail.email}` : undefined
-            }
-          />
-        </div>
-      </section>
-
-      <section className="mt-6">
-        <h3 className="text-[11px] font-bold uppercase tracking-wider text-charcoal-light">
-          Notes
-        </h3>
-        <div className="mt-3 rounded-xl border border-charcoal/[0.08] bg-cream-light/40 p-4">
-          {loading ? (
-            <p className="text-sm text-charcoal-light/70">Loading notes…</p>
-          ) : detail?.notes && detail.notes.trim().length > 0 ? (
-            <p className="whitespace-pre-wrap text-sm leading-relaxed text-charcoal">
-              {detail.notes}
-            </p>
-          ) : (
-            <p className="text-sm text-charcoal-light/70">No notes yet.</p>
-          )}
-        </div>
-      </section>
-
-      <section className="mt-6">
-        <div className="flex items-center justify-between gap-3">
-          <h3 className="text-[11px] font-bold uppercase tracking-wider text-charcoal-light">
-            Supporting documents
-          </h3>
-          <button
-            type="button"
-            onClick={handleUploadClick}
-            disabled={uploading}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-charcoal/15 bg-cream px-3 py-1.5 text-xs font-medium text-charcoal transition-colors hover:bg-cream-light disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <Upload className="size-3.5" strokeWidth={1.75} aria-hidden />
-            {uploading ? "Uploading…" : "Add document"}
-          </button>
+    <div className={shellClass}>
+      <div className={innerClass}>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          {BackControl}
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={onAdd}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-charcoal px-3 py-2 text-xs font-medium text-cream transition-colors hover:bg-charcoal/90"
+            >
+              <Plus className="size-3.5" aria-hidden />
+              Add contact
+            </button>
+            <button
+              type="button"
+              onClick={onEdit}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-charcoal/15 bg-cream px-3 py-2 text-xs font-medium text-charcoal transition-colors hover:bg-cream-light"
+            >
+              <Pencil className="size-3.5" aria-hidden />
+              Edit details
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleDelete()}
+              disabled={deleting}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-red-700/20 bg-cream px-3 py-2 text-xs font-medium text-red-700 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Trash2 className="size-3.5" aria-hidden />
+              {deleting ? "Deleting…" : "Delete"}
+            </button>
+          </div>
         </div>
 
-        <input
-          ref={fileInputRef}
-          type="file"
-          className="hidden"
-          onChange={(e) => void handleFileChange(e)}
-        />
-
-        {uploadError ? (
-          <p className="mt-2 text-xs text-red-700/90" role="alert">
-            {uploadError}
-          </p>
-        ) : null}
-        {docsError ? (
-          <p className="mt-2 text-xs text-red-700/90" role="alert">
-            {docsError}
+        {deleteError ? (
+          <p className="mt-3 text-sm text-red-700/90" role="alert">
+            {deleteError}
           </p>
         ) : null}
 
-        <div className="mt-3">
-          {docsLoading ? (
-            <div className="flex items-start gap-3 rounded-xl border border-dashed border-charcoal/15 bg-cream-light/30 p-4">
-              <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-charcoal/[0.06] text-charcoal-light">
-                <FileText className="size-4" strokeWidth={1.5} aria-hidden />
-              </span>
-              <p className="text-sm text-charcoal-light/70">Loading documents…</p>
+        {/* Compact identity + metrics strip */}
+        <div className="mt-4 rounded-xl border border-charcoal/[0.08] bg-cream-light/50 px-4 py-3 sm:px-5">
+          <div className="flex flex-wrap items-start gap-3 sm:gap-4">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-sky-100 text-xs font-semibold text-sky-800 sm:size-11 sm:text-sm">
+              {initials(contact.name)}
             </div>
-          ) : documents.length === 0 ? (
-            <div className="flex items-start gap-3 rounded-xl border border-dashed border-charcoal/15 bg-cream-light/30 p-4">
-              <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-charcoal/[0.06] text-charcoal-light">
-                <FileText className="size-4" strokeWidth={1.5} aria-hidden />
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-charcoal">
-                  No documents yet
+            <div className="min-w-0 flex-1">
+              <h2 className="font-serif text-lg font-normal tracking-tight text-charcoal sm:text-xl">
+                {contact.name}
+              </h2>
+              {subline ? (
+                <p className="mt-0.5 line-clamp-2 text-xs text-charcoal-light/90">
+                  {subline}
                 </p>
-                <p className="mt-1 text-xs text-charcoal-light/80">
-                  Attach PDFs, decks, or term sheets to build this contact&rsquo;s
-                  file.
-                </p>
+              ) : null}
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {contact.contact_type ? (
+                  <span className="inline-flex items-center gap-1 rounded-md border border-charcoal/10 bg-cream px-2 py-0.5 text-[11px] text-charcoal">
+                    <Tag className="size-3 opacity-60" aria-hidden />
+                    {contact.contact_type}
+                  </span>
+                ) : null}
+                {contact.sector ? (
+                  <span className="rounded-md border border-charcoal/10 bg-cream px-2 py-0.5 text-[11px] text-charcoal-light">
+                    {contact.sector}
+                  </span>
+                ) : null}
+                {contact.organisation_type ? (
+                  <span className="rounded-md border border-charcoal/10 bg-cream px-2 py-0.5 text-[11px] text-charcoal-light">
+                    {contact.organisation_type}
+                  </span>
+                ) : null}
               </div>
             </div>
-          ) : (
-            <ul className="flex flex-col gap-2">
-              {documents.map((doc) => {
-                const meta = [formatBytes(doc.sizeBytes), formatDate(doc.createdAt)]
-                  .filter((x) => x.length > 0 && x !== "—")
-                  .join(" · ");
-                const removing = removingDocId === doc.id;
-                return (
-                  <li
-                    key={doc.id}
-                    className="flex items-center gap-3 rounded-xl border border-charcoal/[0.08] bg-cream-light/40 px-4 py-3"
-                  >
-                    <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-charcoal/[0.06] text-charcoal-light">
-                      <FileText className="size-4" strokeWidth={1.5} aria-hidden />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <a
-                        href={`/api/workspace/contacts/${contact.id}/documents/${doc.id}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="block truncate text-sm font-medium text-charcoal underline-offset-2 hover:underline"
-                      >
-                        {doc.filename}
-                      </a>
-                      {meta ? (
-                        <p className="mt-0.5 truncate text-xs text-charcoal-light/80">
-                          {meta}
-                        </p>
-                      ) : null}
-                    </div>
-                    <a
-                      href={`/api/workspace/contacts/${contact.id}/documents/${doc.id}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-charcoal-light transition-colors hover:bg-charcoal/5 hover:text-charcoal"
-                      aria-label={`Download ${doc.filename}`}
-                      title="Download"
-                    >
-                      <Download className="size-4" strokeWidth={1.75} aria-hidden />
-                    </a>
-                    <button
-                      type="button"
-                      onClick={() => void handleRemoveDocument(doc.id)}
-                      disabled={removing}
-                      className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-charcoal-light transition-colors hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-60"
-                      aria-label={`Remove ${doc.filename}`}
-                      title="Remove"
-                    >
-                      <X className="size-4" strokeWidth={1.75} aria-hidden />
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+          </div>
+
+          <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-charcoal/[0.06] pt-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+            <MetaItem
+              label="Organisation"
+              value={contact.organisation_name}
+            />
+            <MetaItem label="Role" value={contact.role} />
+            <MetaItem label="Geography" value={contact.geography} />
+            <MetaItem
+              label="Last contact"
+              value={formatDate(contact.last_contact_date)}
+            />
+            <MetaItem
+              label="Rex team"
+              value={contact.internal_owner}
+            />
+            <MetaItem
+              label="Phone"
+              value={loading ? "…" : detail?.phone ?? null}
+              href={
+                !loading && detail?.phone
+                  ? `tel:${detail.phone.replace(/\s+/g, "")}`
+                  : undefined
+              }
+            />
+            <MetaItem
+              label="Email"
+              value={loading ? "…" : detail?.email ?? null}
+              href={
+                !loading && detail?.email ? `mailto:${detail.email}` : undefined
+              }
+            />
+          </div>
         </div>
-      </section>
+
+        {error ? (
+          <p className="mt-4 text-sm text-red-700/90" role="alert">
+            {error}
+          </p>
+        ) : null}
+
+        <div
+          className={`mt-8 grid gap-8 ${isPage ? "lg:grid-cols-2 lg:items-start" : ""}`}
+        >
+          <div className="flex min-h-0 flex-col gap-8">
+            <section>
+              <h3 className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-charcoal-light">
+                <UserCircle2 className="size-3.5 opacity-70" aria-hidden />
+                Notes
+              </h3>
+              <p className="mt-1 text-xs text-charcoal-light/80">
+                Long-form context for this relationship — saved separately from
+                quick comments below.
+              </p>
+              <textarea
+                value={notesDraft}
+                onChange={(e) => {
+                  setNotesDraft(e.target.value);
+                  setNotesDirty(true);
+                }}
+                rows={isPage ? 12 : 8}
+                disabled={loading}
+                className={`${WORKSPACE_FORM_INPUT_CLASS} mt-3 min-h-[12rem] resize-y font-sans leading-relaxed`}
+                placeholder="Background, thesis, intro history, follow-ups…"
+              />
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  disabled={!notesDirty || notesSaving || loading}
+                  onClick={() => void saveNotes()}
+                  className={WORKSPACE_FORM_BTN_PRIMARY}
+                >
+                  {notesSaving ? "Saving…" : "Save notes"}
+                </button>
+                {notesDirty ? (
+                  <span className="text-xs text-charcoal-light/75">
+                    Unsaved changes
+                  </span>
+                ) : null}
+              </div>
+              {notesSaveError ? (
+                <p className="mt-2 text-xs text-red-700/90" role="alert">
+                  {notesSaveError}
+                </p>
+              ) : null}
+            </section>
+
+            <section>
+              <h3 className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-charcoal-light">
+                <MessageSquare className="size-3.5 opacity-70" aria-hidden />
+                Comments
+              </h3>
+              <p className="mt-1 text-xs text-charcoal-light/80">
+                Short timestamped notes for your team on this contact.
+              </p>
+              <div className="mt-3 rounded-xl border border-charcoal/[0.08] bg-cream-light/30 p-3">
+                <label className={WORKSPACE_FORM_LABEL_CLASS} htmlFor="contact-new-comment">
+                  New comment
+                </label>
+                <textarea
+                  id="contact-new-comment"
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  rows={3}
+                  className={`${WORKSPACE_FORM_INPUT_CLASS} resize-y`}
+                  placeholder="Add a comment…"
+                />
+                <div className="mt-2 flex justify-end">
+                  <button
+                    type="button"
+                    disabled={
+                      newComment.trim() === "" || postingComment
+                    }
+                    onClick={() => void postComment()}
+                    className={WORKSPACE_FORM_BTN_PRIMARY}
+                  >
+                    {postingComment ? "Posting…" : "Post comment"}
+                  </button>
+                </div>
+              </div>
+              {commentsError ? (
+                <p className="mt-2 text-xs text-red-700/90" role="alert">
+                  {commentsError}
+                </p>
+              ) : null}
+              <ul className="mt-3 flex max-h-[28rem] flex-col gap-2 overflow-y-auto pr-1">
+                {commentsLoading ? (
+                  <li className="text-sm text-charcoal-light/70">
+                    Loading comments…
+                  </li>
+                ) : comments.length === 0 ? (
+                  <li className="rounded-lg border border-dashed border-charcoal/12 bg-cream-light/20 px-3 py-6 text-center text-sm text-charcoal-light/80">
+                    No comments yet.
+                  </li>
+                ) : (
+                  comments.map((c) => (
+                    <li
+                      key={c.id}
+                      className="rounded-lg border border-charcoal/[0.06] bg-cream-light/40 px-3 py-2.5"
+                    >
+                      <p className="text-[11px] text-charcoal-light/80">
+                        {formatDateTime(c.createdAt)}
+                      </p>
+                      <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-charcoal">
+                        {c.body}
+                      </p>
+                    </li>
+                  ))
+                )}
+              </ul>
+            </section>
+          </div>
+
+          <section className="min-h-0">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-charcoal-light">
+                <FileText className="size-3.5 opacity-70" aria-hidden />
+                Documents
+              </h3>
+              <button
+                type="button"
+                onClick={handleUploadClick}
+                disabled={uploading}
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-charcoal/15 bg-cream px-3 py-1.5 text-xs font-medium text-charcoal transition-colors hover:bg-cream-light disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Upload className="size-3.5" strokeWidth={1.75} aria-hidden />
+                {uploading ? "Uploading…" : "Upload"}
+              </button>
+            </div>
+            <p className="mt-1 text-xs text-charcoal-light/80">
+              PDFs, decks, term sheets — stored with this contact.
+            </p>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              onChange={(e) => void handleFileChange(e)}
+            />
+
+            {uploadError ? (
+              <p className="mt-2 text-xs text-red-700/90" role="alert">
+                {uploadError}
+              </p>
+            ) : null}
+            {docsError ? (
+              <p className="mt-2 text-xs text-red-700/90" role="alert">
+                {docsError}
+              </p>
+            ) : null}
+
+            <div className="mt-3">
+              {docsLoading ? (
+                <div className="flex min-h-[8rem] items-start gap-3 rounded-xl border border-dashed border-charcoal/15 bg-cream-light/30 p-4">
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-charcoal/[0.06] text-charcoal-light">
+                    <FileText className="size-4" strokeWidth={1.5} aria-hidden />
+                  </span>
+                  <p className="text-sm text-charcoal-light/70">Loading documents…</p>
+                </div>
+              ) : documents.length === 0 ? (
+                <div className="flex min-h-[10rem] items-start gap-3 rounded-xl border border-dashed border-charcoal/15 bg-cream-light/30 p-4">
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-charcoal/[0.06] text-charcoal-light">
+                    <FileText className="size-4" strokeWidth={1.5} aria-hidden />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-charcoal">
+                      No documents yet
+                    </p>
+                    <p className="mt-1 text-xs text-charcoal-light/80">
+                      Upload files to build this contact&rsquo;s record.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <ul className="flex max-h-[32rem] flex-col gap-2 overflow-y-auto pr-1">
+                  {documents.map((doc) => {
+                    const meta = [formatBytes(doc.sizeBytes), formatDate(doc.createdAt)]
+                      .filter((x) => x.length > 0 && x !== "—")
+                      .join(" · ");
+                    const removing = removingDocId === doc.id;
+                    return (
+                      <li
+                        key={doc.id}
+                        className="flex items-center gap-3 rounded-xl border border-charcoal/[0.08] bg-cream-light/40 px-4 py-3"
+                      >
+                        <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-charcoal/[0.06] text-charcoal-light">
+                          <FileText className="size-4" strokeWidth={1.5} aria-hidden />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <a
+                            href={`/api/workspace/contacts/${contact.id}/documents/${doc.id}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="block truncate text-sm font-medium text-charcoal underline-offset-2 hover:underline"
+                          >
+                            {doc.filename}
+                          </a>
+                          {meta ? (
+                            <p className="mt-0.5 truncate text-xs text-charcoal-light/80">
+                              {meta}
+                            </p>
+                          ) : null}
+                        </div>
+                        <a
+                          href={`/api/workspace/contacts/${contact.id}/documents/${doc.id}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-charcoal-light transition-colors hover:bg-charcoal/5 hover:text-charcoal"
+                          aria-label={`Download ${doc.filename}`}
+                          title="Download"
+                        >
+                          <Download className="size-4" strokeWidth={1.75} aria-hidden />
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => void handleRemoveDocument(doc.id)}
+                          disabled={removing}
+                          className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-charcoal-light transition-colors hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                          aria-label={`Remove ${doc.filename}`}
+                          title="Remove"
+                        >
+                          <X className="size-4" strokeWidth={1.75} aria-hidden />
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          </section>
+        </div>
+      </div>
     </div>
   );
 }

@@ -159,36 +159,33 @@ export type WorkspaceContactDetail = {
   contact_type: string | null;
   sector: string | null;
   organisation_id: string | null;
+  organisation_name: string | null;
+  organisation_type: string | null;
   role: string | null;
   geography: string | null;
   phone: string | null;
   email: string | null;
   notes: string | null;
   internal_owner: string | null;
+  last_contact_date: string | null;
 };
 
-export async function fetchWorkspaceContactById(
-  client: SupabaseClient,
-  id: string,
-): Promise<WorkspaceContactDetail | null> {
-  const { data, error } = await client
-    .from("contacts")
-    .select(
-      "id,name,contact_type,sector,organisation_id,role,geography,phone,email,notes,internal_owner",
-    )
-    .eq("id", id)
-    .maybeSingle();
-
-  if (error) throw error;
-  if (!data) return null;
-
+function mapContactDetailFromRow(
+  data: Record<string, unknown>,
+  lastContactDate: string | null,
+  organisationName: string | null,
+  organisationType: string | null,
+): WorkspaceContactDetail {
   return {
-    id: String(data.id),
+    id: String(data.id ?? ""),
     name: String(data.name ?? ""),
-    contact_type: data.contact_type == null ? null : String(data.contact_type),
+    contact_type:
+      data.contact_type == null ? null : String(data.contact_type),
     sector: data.sector == null ? null : String(data.sector),
     organisation_id:
       data.organisation_id == null ? null : String(data.organisation_id),
+    organisation_name: organisationName,
+    organisation_type: organisationType,
     role: data.role == null ? null : String(data.role),
     geography: data.geography == null ? null : String(data.geography),
     phone: data.phone == null ? null : String(data.phone),
@@ -196,6 +193,133 @@ export async function fetchWorkspaceContactById(
     notes: data.notes == null ? null : String(data.notes),
     internal_owner:
       data.internal_owner == null ? null : String(data.internal_owner),
+    last_contact_date: lastContactDate,
+  };
+}
+
+export async function fetchWorkspaceContactById(
+  client: SupabaseClient,
+  id: string,
+): Promise<WorkspaceContactDetail | null> {
+  const fullSelect =
+    "id,name,contact_type,sector,organisation_id,role,geography,phone,email,notes,internal_owner,last_contact_date";
+  const fallbackSelect =
+    "id,name,contact_type,sector,organisation_id,role,geography,phone,email,notes,internal_owner";
+
+  let data: Record<string, unknown> | null = null;
+
+  {
+    const res = await client.from("contacts").select(fullSelect).eq("id", id).maybeSingle();
+    if (res.error) {
+      const code = (res.error as { code?: string }).code;
+      if (code === "42703" || code === "PGRST204") {
+        const retry = await client
+          .from("contacts")
+          .select(fallbackSelect)
+          .eq("id", id)
+          .maybeSingle();
+        if (retry.error) throw retry.error;
+        data = retry.data as Record<string, unknown> | null;
+        if (data == null) return null;
+        const orgId =
+          data.organisation_id == null ? null : String(data.organisation_id);
+        let organisation_name: string | null = null;
+        let organisation_type: string | null = null;
+        if (orgId) {
+          const orgRes = await client
+            .from("organisations")
+            .select("name,type")
+            .eq("id", orgId)
+            .maybeSingle();
+          if (!orgRes.error && orgRes.data) {
+            organisation_name =
+              orgRes.data.name == null ? null : String(orgRes.data.name);
+            organisation_type =
+              orgRes.data.type == null ? null : String(orgRes.data.type);
+          }
+        }
+        return mapContactDetailFromRow(data, null, organisation_name, organisation_type);
+      }
+      throw res.error;
+    }
+    data = res.data as Record<string, unknown> | null;
+  }
+
+  if (data == null) return null;
+
+  const lastRaw = data.last_contact_date;
+  const lastContactDate =
+    lastRaw == null || lastRaw === "" ? null : String(lastRaw);
+
+  let organisation_name: string | null = null;
+  let organisation_type: string | null = null;
+  const orgId =
+    data.organisation_id == null ? null : String(data.organisation_id);
+  if (orgId) {
+    const orgRes = await client
+      .from("organisations")
+      .select("name,type")
+      .eq("id", orgId)
+      .maybeSingle();
+    if (!orgRes.error && orgRes.data) {
+      organisation_name =
+        orgRes.data.name == null ? null : String(orgRes.data.name);
+      organisation_type =
+        orgRes.data.type == null ? null : String(orgRes.data.type);
+    }
+  }
+
+  return mapContactDetailFromRow(
+    data,
+    lastContactDate,
+    organisation_name,
+    organisation_type,
+  );
+}
+
+export type WorkspaceContactCommentRow = {
+  id: string;
+  body: string;
+  created_at: string;
+};
+
+export async function listWorkspaceContactComments(
+  client: SupabaseClient,
+  contactId: string,
+): Promise<WorkspaceContactCommentRow[]> {
+  const { data, error } = await client
+    .from("contact_comments")
+    .select("id,body,created_at")
+    .eq("contact_id", contactId)
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+
+  return (data ?? []).map((r) => ({
+    id: String((r as { id: unknown }).id ?? ""),
+    body: String((r as { body: unknown }).body ?? ""),
+    created_at: String((r as { created_at: unknown }).created_at ?? ""),
+  }));
+}
+
+export async function insertWorkspaceContactComment(
+  client: SupabaseClient,
+  contactId: string,
+  body: string,
+): Promise<WorkspaceContactCommentRow> {
+  const { data, error } = await client
+    .from("contact_comments")
+    .insert({ contact_id: contactId, body })
+    .select("id,body,created_at")
+    .single();
+
+  if (error) throw error;
+  if (!data) throw new Error("Insert returned no row");
+
+  return {
+    id: String(data.id),
+    body: String(data.body ?? ""),
+    created_at: String(data.created_at ?? ""),
   };
 }
 

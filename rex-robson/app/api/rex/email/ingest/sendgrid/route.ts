@@ -1,17 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ingestForwardedEmail } from "@/lib/email/ingest";
+import { verifySendGridIngestSecret } from "@/lib/email/ingest-route-auth";
 import { sendGridFormDataToIngestInput } from "@/lib/email/sendgrid-inbound";
 import { getWorkspaceWriteClient } from "@/lib/data/workspace-mutations";
 
 export const runtime = "nodejs";
-
-function verifyIngestSecret(req: NextRequest): boolean {
-  const secret = process.env.SENDGRID_INBOUND_PARSE_SECRET;
-  if (!secret) return true;
-  const query = req.nextUrl.searchParams.get("secret");
-  const header = req.headers.get("x-rex-ingest-secret");
-  return query === secret || header === secret;
-}
 
 /**
  * Twilio SendGrid Inbound Parse webhook.
@@ -19,11 +12,13 @@ function verifyIngestSecret(req: NextRequest): boolean {
  * Configure in SendGrid: destination URL e.g.
  * `https://your-host/api/rex/email/ingest/sendgrid?secret=YOUR_SECRET`
  *
+ * Production: set `SENDGRID_INBOUND_PARSE_SECRET` (401 if missing). Development may omit it.
+ *
  * Enable **POST the raw, full MIME message** so the `email` field is sent
  * (best fidelity, including attachments). Parsed-only mode is also supported.
  */
 export async function POST(req: NextRequest) {
-  if (!verifyIngestSecret(req)) {
+  if (!verifySendGridIngestSecret(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

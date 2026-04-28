@@ -3,6 +3,7 @@ import {
   ingestForwardedEmail,
   type IngestEmailInput,
 } from "@/lib/email/ingest";
+import { verifyGenericEmailIngestAccess } from "@/lib/email/ingest-route-auth";
 import { getWorkspaceWriteClient } from "@/lib/data/workspace-mutations";
 
 export const runtime = "nodejs";
@@ -124,6 +125,10 @@ async function buildJsonOrRawInput(
 }
 
 export async function POST(req: Request) {
+  if (!(await verifyGenericEmailIngestAccess(req))) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const contentType = req.headers.get("content-type") ?? "";
   let input: IngestEmailInput | { error: string };
   if (contentType.includes("multipart/form-data")) {

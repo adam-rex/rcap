@@ -13,7 +13,8 @@
     "db:seed:call-logs": "tsx scripts/seed/callLogs.ts",
     "db:seed:tasks": "tsx scripts/seed/tasks.ts",
     "db:seed:contacts-sample": "tsx scripts/seed/fillContactSampleData.ts",
-    "db:push": "supabase db push"
+    "db:push": "supabase db push",
+    "verify:rex-email": "tsx scripts/verify-rex-email-setup.ts"
   },
   "dependencies": {
     "@fontsource/playfair-display": "^5.2.8",

@@ -32,6 +32,24 @@ export const CHAT_NAV_ITEMS = [
 
 export type ChatNavId = (typeof CHAT_NAV_ITEMS)[number]["id"];
 
+const CHAT_NAV_ID_SET = new Set<string>(
+  CHAT_NAV_ITEMS.map((item) => item.id),
+);
+
+/** `Home` URL that opens the Contacts panel in the Rex shell. */
+export const HOME_CONTACTS_HREF = "/?nav=contacts";
+
+/**
+ * Read `nav` query values like `/?nav=contacts` from the home page URL.
+ * Returns null if missing or not a known shell tab id.
+ */
+export function parseChatNavQuery(
+  raw: string | null | undefined,
+): ChatNavId | null {
+  if (raw == null || raw === "") return null;
+  return CHAT_NAV_ID_SET.has(raw) ? (raw as ChatNavId) : null;
+}
+
 /**
  * Padding-bottom for main shell so content clears the fixed bottom nav +
  * safe-area inset (matches chat-mobile-nav layout).

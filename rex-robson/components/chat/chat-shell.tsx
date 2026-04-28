@@ -2,7 +2,7 @@
 
 import { Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { DashboardMetrics } from "@/lib/data/dashboard-metrics.types";
 import type { WorkspaceLists } from "@/lib/data/workspace-lists";
 import type { RexDashboardStats } from "@/lib/rex/voice";
@@ -11,6 +11,7 @@ import { ChatMessageList, type ChatMessage } from "./chat-message-list";
 import {
   chatNavLabel,
   MOBILE_SHELL_BOTTOM_PAD_CLASS,
+  parseChatNavQuery,
   type ChatNavId,
 } from "./chat-nav-config";
 import { ChatMobileNav } from "./chat-mobile-nav";
@@ -30,6 +31,8 @@ type ChatShellProps = {
   stats: RexDashboardStats;
   workspace: WorkspaceLists;
   metrics: DashboardMetrics;
+  /** When opening `/` with `?nav=…`, which shell panel to show first. */
+  initialActiveNav?: ChatNavId | null;
 };
 
 export function ChatShell({
@@ -37,8 +40,11 @@ export function ChatShell({
   stats,
   workspace,
   metrics,
+  initialActiveNav = null,
 }: ChatShellProps) {
-  const [activeNav, setActiveNav] = useState<ChatNavId>("dashboard");
+  const [activeNav, setActiveNav] = useState<ChatNavId>(
+    () => initialActiveNav ?? "dashboard",
+  );
   const [messages, setMessages] = useState<ChatMessage[]>(() => [
     { id: "rex-open", role: "rex", text: openingGreeting },
   ]);
@@ -50,6 +56,16 @@ export function ChatShell({
     null,
   );
   const router = useRouter();
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const fromQuery = parseChatNavQuery(params.get("nav"));
+    if (fromQuery != null) {
+      setActiveNav(fromQuery);
+      router.replace("/", { scroll: false });
+    }
+  }, [router]);
 
   const onAddContactFromDashboard = useCallback(() => {
     setActiveNav("contacts");

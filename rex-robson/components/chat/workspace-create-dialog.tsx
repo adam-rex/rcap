@@ -27,6 +27,8 @@ type WorkspaceCreateDialogProps = {
   children: ReactNode;
   /** Full-viewport sheet (e.g. contact create/edit). Default: centered modal. */
   variant?: "modal" | "fullscreen";
+  /** Max width for modal variant (Tailwind classes). */
+  modalMaxWidthClass?: string;
 };
 
 export function WorkspaceCreateDialog({
@@ -35,6 +37,7 @@ export function WorkspaceCreateDialog({
   onClose,
   children,
   variant = "modal",
+  modalMaxWidthClass = "max-w-md",
 }: WorkspaceCreateDialogProps) {
   // Mount-detect so we only call createPortal client-side (avoids SSR mismatch).
   const [mounted, setMounted] = useState(false);
@@ -86,7 +89,7 @@ export function WorkspaceCreateDialog({
         className={
           fullscreen
             ? "relative flex h-[min(100dvh,calc(100dvh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)))] w-full max-w-none flex-col overflow-hidden border-0 border-charcoal/15 bg-cream shadow-none"
-            : "relative mt-auto max-h-[min(90dvh,calc(100dvh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)))] w-full max-w-md overflow-y-auto rounded-t-xl border border-charcoal/15 bg-cream pb-[env(safe-area-inset-bottom,0px)] shadow-xl sm:mt-0 sm:max-h-[90dvh] sm:rounded-xl"
+            : `relative mt-auto max-h-[min(90dvh,calc(100dvh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px))] w-full ${modalMaxWidthClass} overflow-y-auto rounded-t-xl border border-charcoal/15 bg-cream pb-[env(safe-area-inset-bottom,0px)] shadow-xl sm:mt-0 sm:max-h-[90dvh] sm:rounded-xl`
         }
       >
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-charcoal/10 px-4 py-3">

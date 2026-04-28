@@ -28,12 +28,15 @@ export async function GET(_req: Request, context: RouteContext) {
       contactType: row.contact_type,
       sector: row.sector,
       organisationId: row.organisation_id,
+      organisationName: row.organisation_name,
+      organisationType: row.organisation_type,
       role: row.role,
       geography: row.geography,
       phone: row.phone,
       email: row.email,
       notes: row.notes,
       internalOwner: row.internal_owner,
+      lastContactDate: row.last_contact_date,
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Query failed";
