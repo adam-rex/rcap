@@ -1,19 +1,12 @@
 "use client";
 
-import {
-  ChevronDown,
-  ChevronRight,
-  ListTodo,
-  MessageSquare,
-  Plus,
-} from "lucide-react";
+import { Plus } from "lucide-react";
 import type { DragEvent, FormEvent } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   type MatchKind,
   type MatchOutcome,
-  type PipelineInternalComment,
-  type PipelineInternalTodo,
   type PipelineTransactionStage,
   type WorkspacePipelineTransactionRow,
 } from "@/lib/data/workspace-matches-page.types";
@@ -70,239 +63,6 @@ function outcomeLabel(outcome: MatchOutcome | null) {
   return OUTCOMES.find((o) => o.id === outcome)?.label ?? outcome;
 }
 
-function formatDealWorkspaceTimestamp(iso: string) {
-  try {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return iso;
-    return d.toLocaleString(undefined, {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return iso;
-  }
-}
-
-function PipelineDealInternalSection({
-  deal,
-  expanded,
-  onToggleExpand,
-  onAfterPatch,
-}: {
-  deal: WorkspacePipelineTransactionRow;
-  expanded: boolean;
-  onToggleExpand: () => void;
-  onAfterPatch: () => void;
-}) {
-  const [commentDraft, setCommentDraft] = useState("");
-  const [todoDraft, setTodoDraft] = useState("");
-  const [localError, setLocalError] = useState<string | null>(null);
-  const [patchBusy, setPatchBusy] = useState(false);
-
-  const runPatch = async (body: Record<string, unknown>) => {
-    setLocalError(null);
-    setPatchBusy(true);
-    try {
-      const res = await fetch(`/api/workspace/match-transactions/${deal.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const data = (await res.json()) as { error?: string };
-      if (!res.ok) {
-        setLocalError(data.error ?? "Could not save.");
-        return;
-      }
-      onAfterPatch();
-    } catch {
-      setLocalError("Network error.");
-    } finally {
-      setPatchBusy(false);
-    }
-  };
-
-  const nComments = deal.internal_comments.length;
-  const nTodos = deal.internal_todos.length;
-  const nOpenTodos = deal.internal_todos.filter((t) => !t.done).length;
-
-  return (
-    <div className="mt-2 border-t border-charcoal/10 pt-2">
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          onToggleExpand();
-        }}
-        className="flex w-full items-center justify-between gap-2 rounded-md px-1 py-1.5 text-left text-[11px] font-medium text-charcoal-light transition-colors hover:bg-charcoal/5 hover:text-charcoal"
-      >
-        <span className="flex min-w-0 items-center gap-1.5">
-          {expanded ? (
-            <ChevronDown className="size-3.5 shrink-0" aria-hidden />
-          ) : (
-            <ChevronRight className="size-3.5 shrink-0" aria-hidden />
-          )}
-          <MessageSquare className="size-3.5 shrink-0 opacity-70" aria-hidden />
-          <span className="truncate">Team workspace</span>
-        </span>
-        <span className="shrink-0 text-right text-[10px] text-charcoal-light/80">
-          {nComments > 0
-            ? `${nComments} comment${nComments === 1 ? "" : "s"}`
-            : ""}
-          {nComments > 0 && nTodos > 0 ? " · " : ""}
-          {nTodos > 0
-            ? `${nOpenTodos}/${nTodos} to-do${nTodos === 1 ? "" : "s"}`
-            : ""}
-          {nComments === 0 && nTodos === 0 ? "Add notes & to-dos" : ""}
-        </span>
-      </button>
-      {expanded ? (
-        <div
-          className="mt-2 space-y-3 rounded-md border border-charcoal/10 bg-cream/80 p-2"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {localError ? (
-            <p className="text-[11px] text-red-700/90" role="alert">
-              {localError}
-            </p>
-          ) : null}
-          <div>
-            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-charcoal-light/90">
-              Comments
-            </p>
-            <p className="mb-1.5 text-[10px] text-charcoal-light/75">
-              Internal only — not Rex tasks.
-            </p>
-            <div className="max-h-28 space-y-1.5 overflow-y-auto">
-              {[...deal.internal_comments].reverse().map((c) => (
-                <div
-                  key={c.id}
-                  className="rounded border border-charcoal/8 bg-cream px-2 py-1.5 text-[11px] text-charcoal"
-                >
-                  <p className="whitespace-pre-wrap">{c.body}</p>
-                  <p className="mt-0.5 text-[10px] text-charcoal-light/70">
-                    {formatDealWorkspaceTimestamp(c.created_at)}
-                  </p>
-                </div>
-              ))}
-              {deal.internal_comments.length === 0 ? (
-                <p className="text-[11px] text-charcoal-light/70">
-                  No comments yet.
-                </p>
-              ) : null}
-            </div>
-            <div className="mt-1.5 flex gap-1">
-              <input
-                type="text"
-                value={commentDraft}
-                onChange={(e) => setCommentDraft(e.target.value)}
-                placeholder="Add a comment…"
-                disabled={patchBusy}
-                className="min-w-0 flex-1 rounded border border-charcoal/15 bg-cream px-2 py-1 text-[11px] text-charcoal outline-none ring-charcoal/15 focus:ring-1"
-              />
-              <button
-                type="button"
-                disabled={patchBusy || commentDraft.trim().length === 0}
-                onClick={async () => {
-                  const t = commentDraft.trim();
-                  if (!t) return;
-                  await runPatch({
-                    internalComments: [
-                      ...deal.internal_comments,
-                      {
-                        id: crypto.randomUUID(),
-                        body: t,
-                        created_at: new Date().toISOString(),
-                      },
-                    ],
-                  });
-                  setCommentDraft("");
-                }}
-                className="shrink-0 rounded border border-charcoal/20 bg-charcoal px-2 py-1 text-[10px] font-medium text-cream disabled:opacity-40"
-              >
-                Add
-              </button>
-            </div>
-          </div>
-          <div>
-            <p className="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-charcoal-light/90">
-              <ListTodo className="size-3" aria-hidden />
-              Internal to-dos
-            </p>
-            <ul className="max-h-24 space-y-1 overflow-y-auto">
-              {deal.internal_todos.map((t) => (
-                <li key={t.id} className="flex items-start gap-2 text-[11px]">
-                  <input
-                    type="checkbox"
-                    checked={t.done}
-                    disabled={patchBusy}
-                    onChange={async () => {
-                      await runPatch({
-                        internalTodos: deal.internal_todos.map((x) =>
-                          x.id === t.id ? { ...x, done: !x.done } : x,
-                        ),
-                      });
-                    }}
-                    className="mt-0.5 rounded border-charcoal/25"
-                  />
-                  <span
-                    className={
-                      t.done
-                        ? "text-charcoal-light line-through"
-                        : "text-charcoal"
-                    }
-                  >
-                    {t.body}
-                  </span>
-                </li>
-              ))}
-              {deal.internal_todos.length === 0 ? (
-                <li className="text-[11px] text-charcoal-light/70">
-                  No to-dos yet.
-                </li>
-              ) : null}
-            </ul>
-            <div className="mt-1.5 flex gap-1">
-              <input
-                type="text"
-                value={todoDraft}
-                onChange={(e) => setTodoDraft(e.target.value)}
-                placeholder="Add a to-do…"
-                disabled={patchBusy}
-                className="min-w-0 flex-1 rounded border border-charcoal/15 bg-cream px-2 py-1 text-[11px] text-charcoal outline-none ring-charcoal/15 focus:ring-1"
-              />
-              <button
-                type="button"
-                disabled={patchBusy || todoDraft.trim().length === 0}
-                onClick={async () => {
-                  const t = todoDraft.trim();
-                  if (!t) return;
-                  await runPatch({
-                    internalTodos: [
-                      ...deal.internal_todos,
-                      {
-                        id: crypto.randomUUID(),
-                        body: t,
-                        done: false,
-                        created_at: new Date().toISOString(),
-                      },
-                    ],
-                  });
-                  setTodoDraft("");
-                }}
-                className="shrink-0 rounded border border-charcoal/20 bg-charcoal px-2 py-1 text-[10px] font-medium text-cream disabled:opacity-40"
-              >
-                Add
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 const OUTCOME_PILL: Record<MatchOutcome, string> = {
   won: "border-emerald-700/30 bg-emerald-700/10 text-emerald-800",
   lost: "border-red-700/30 bg-red-700/10 text-red-800",
@@ -323,6 +83,7 @@ type OpportunityPick = {
 const MATCH_CANVAS_PAGE_SIZE = 500;
 
 export function MatchCanvasPanel() {
+  const router = useRouter();
   const pageSize = MATCH_CANVAS_PAGE_SIZE;
   const [queryInput, setQueryInput] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
@@ -340,9 +101,6 @@ export function MatchCanvasPanel() {
     useState<PipelineTransactionStage | null>(null);
 
   const [formOpen, setFormOpen] = useState(false);
-  const [formMode, setFormMode] = useState<"create" | "edit">("create");
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
   const [formBusy, setFormBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [opportunityOptions, setOpportunityOptions] = useState<
@@ -357,19 +115,6 @@ export function MatchCanvasPanel() {
   const [fOutcome, setFOutcome] = useState<MatchOutcome | "">("");
   const [fContext, setFContext] = useState("");
   const [fNotes, setFNotes] = useState("");
-  /** Display-only in edit mode */
-  const [fPairHeadline, setFPairHeadline] = useState("");
-  const [fInternalComments, setFInternalComments] = useState<
-    PipelineInternalComment[]
-  >([]);
-  const [fInternalTodos, setFInternalTodos] = useState<PipelineInternalTodo[]>(
-    [],
-  );
-  const [fTeamCommentDraft, setFTeamCommentDraft] = useState("");
-  const [fTeamTodoDraft, setFTeamTodoDraft] = useState("");
-  const [internalExpandedId, setInternalExpandedId] = useState<string | null>(
-    null,
-  );
 
   useEffect(() => {
     const t = window.setTimeout(() => setDebouncedQuery(queryInput.trim()), 320);
@@ -433,9 +178,6 @@ export function MatchCanvasPanel() {
   }, [opportunityOptions.length, opportunitiesLoading]);
 
   const openCreate = () => {
-    setFormMode("create");
-    setEditingId(null);
-    setDetailLoading(false);
     setFMatchId("");
     setFTitle("");
     setFKind("founder_investor");
@@ -443,80 +185,21 @@ export function MatchCanvasPanel() {
     setFOutcome("");
     setFContext("");
     setFNotes("");
-    setFPairHeadline("");
-    setFInternalComments([]);
-    setFInternalTodos([]);
-    setFTeamCommentDraft("");
-    setFTeamTodoDraft("");
     setFormError(null);
     setFormOpen(true);
     void ensureOpportunitiesLoaded();
   };
 
-  const openEdit = useCallback(
-    async (m: WorkspacePipelineTransactionRow) => {
-      setFormMode("edit");
-      setEditingId(m.id);
-      setFormError(null);
-      setFormOpen(true);
-      setDetailLoading(true);
-      setFTeamCommentDraft("");
-      setFTeamTodoDraft("");
-      setFPairHeadline(`${m.contact_a_name} ↔ ${m.contact_b_name}`);
-      setFKind(m.kind);
-      setFStage(m.stage);
-      setFOutcome(m.outcome ?? "");
-      setFContext(m.context ?? "");
-      setFNotes(m.notes ?? "");
-      setFTitle(m.title ?? "");
-      setFInternalComments(m.internal_comments ?? []);
-      setFInternalTodos(m.internal_todos ?? []);
-      try {
-        const res = await fetch(`/api/workspace/match-transactions/${m.id}`);
-        const data = (await res.json()) as WorkspacePipelineTransactionRow & {
-          error?: string;
-        };
-        if (!res.ok) {
-          setFormError(
-            typeof data.error === "string" && data.error.length > 0
-              ? data.error
-              : "Could not load deal.",
-          );
-          return;
-        }
-        setFPairHeadline(`${data.contact_a_name} ↔ ${data.contact_b_name}`);
-        setFKind(data.kind);
-        setFStage(data.stage);
-        setFOutcome(data.outcome ?? "");
-        setFContext(data.context ?? "");
-        setFNotes(data.notes ?? "");
-        setFTitle(data.title ?? "");
-        setFInternalComments(data.internal_comments ?? []);
-        setFInternalTodos(data.internal_todos ?? []);
-      } catch {
-        setFormError("Network error while loading deal.");
-      } finally {
-        setDetailLoading(false);
-      }
-    },
-    [],
-  );
-
   const closeForm = () => {
     if (formBusy) return;
     setFormOpen(false);
-    setEditingId(null);
-    setDetailLoading(false);
   };
 
   const onSubmitForm = async (e: FormEvent) => {
     e.preventDefault();
-    if (detailLoading) return;
-    if (formMode === "create") {
-      if (!fMatchId) {
-        setFormError("Pick an introduction from Opportunities.");
-        return;
-      }
+    if (!fMatchId) {
+      setFormError("Pick an introduction from Opportunities.");
+      return;
     }
     if (fStage === "closed" && !fOutcome) {
       setFormError("Pick an outcome to close this deal.");
@@ -525,50 +208,25 @@ export function MatchCanvasPanel() {
     setFormBusy(true);
     setFormError(null);
     try {
-      if (formMode === "create" && editingId == null) {
-        const res = await fetch("/api/workspace/match-transactions", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            matchId: fMatchId,
-            title: fTitle.trim() === "" ? null : fTitle.trim(),
-            context: fContext.trim() === "" ? null : fContext.trim(),
-            notes: fNotes.trim() === "" ? null : fNotes.trim(),
-          }),
-        });
-        const data = (await res.json()) as { error?: string; hint?: string };
-        if (!res.ok) {
-          const parts = [data.error, data.hint].filter(
-            (x): x is string => typeof x === "string" && x.length > 0,
-          );
-          setFormError(parts.length > 0 ? parts.join(" ") : "Could not save.");
-          return;
-        }
-      } else if (formMode === "edit" && editingId != null) {
-        const res = await fetch(`/api/workspace/match-transactions/${editingId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title: fTitle.trim() === "" ? null : fTitle.trim(),
-            stage: fStage,
-            outcome: fStage === "closed" ? fOutcome || null : null,
-            context: fContext.trim() === "" ? null : fContext.trim(),
-            notes: fNotes.trim() === "" ? null : fNotes.trim(),
-            internalComments: fInternalComments,
-            internalTodos: fInternalTodos,
-          }),
-        });
-        const data = (await res.json()) as { error?: string; hint?: string };
-        if (!res.ok) {
-          const parts = [data.error, data.hint].filter(
-            (x): x is string => typeof x === "string" && x.length > 0,
-          );
-          setFormError(parts.length > 0 ? parts.join(" ") : "Could not save.");
-          return;
-        }
+      const res = await fetch("/api/workspace/match-transactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          matchId: fMatchId,
+          title: fTitle.trim() === "" ? null : fTitle.trim(),
+          context: fContext.trim() === "" ? null : fContext.trim(),
+          notes: fNotes.trim() === "" ? null : fNotes.trim(),
+        }),
+      });
+      const data = (await res.json()) as { error?: string; hint?: string };
+      if (!res.ok) {
+        const parts = [data.error, data.hint].filter(
+          (x): x is string => typeof x === "string" && x.length > 0,
+        );
+        setFormError(parts.length > 0 ? parts.join(" ") : "Could not save.");
+        return;
       }
       setFormOpen(false);
-      setEditingId(null);
       setReloadTick((n) => n + 1);
     } catch {
       setFormError("Network error while saving.");
@@ -587,7 +245,7 @@ export function MatchCanvasPanel() {
       if (!source) return;
       if (source.stage === toStage && source.outcome === outcome) return;
       if (toStage === "closed" && !outcome) {
-        void openEdit({ ...source, stage: "closed" });
+        router.push(`/pipeline/deals/${transactionId}`);
         return;
       }
 
@@ -627,7 +285,7 @@ export function MatchCanvasPanel() {
         setStageMoveBusyId(null);
       }
     },
-    [openEdit, rows],
+    [router, rows],
   );
 
   const onCardDragStart = (e: DragEvent<HTMLDivElement>, id: string) => {
@@ -804,9 +462,9 @@ export function MatchCanvasPanel() {
                     >
                       <button
                         type="button"
-                        onClick={() => void openEdit(m)}
+                        onClick={() => router.push(`/pipeline/deals/${m.id}`)}
                         className="w-full cursor-grab text-left active:cursor-grabbing"
-                        aria-label={`Edit deal between ${m.contact_a_name} and ${m.contact_b_name}`}
+                        aria-label={`Open deal between ${m.contact_a_name} and ${m.contact_b_name}`}
                       >
                         <p className="text-sm font-medium text-charcoal">
                           {m.contact_a_name}{" "}
@@ -839,16 +497,6 @@ export function MatchCanvasPanel() {
                         ) : null}
                       </button>
                       <MatchRexTasks matchId={m.match_id} />
-                      <PipelineDealInternalSection
-                        deal={m}
-                        expanded={internalExpandedId === m.id}
-                        onToggleExpand={() =>
-                          setInternalExpandedId((cur) =>
-                            cur === m.id ? null : m.id,
-                          )
-                        }
-                        onAfterPatch={() => setReloadTick((n) => n + 1)}
-                      />
                       <div className="mt-2 flex items-center gap-1.5">
                         {STAGES.filter((x) => x.id !== m.stage).map((target) => (
                           <button

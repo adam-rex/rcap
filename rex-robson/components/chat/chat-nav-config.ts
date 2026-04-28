@@ -39,6 +39,9 @@ const CHAT_NAV_ID_SET = new Set<string>(
 /** `Home` URL that opens the Contacts panel in the Rex shell. */
 export const HOME_CONTACTS_HREF = "/?nav=contacts";
 
+/** `Home` URL that opens the Pipeline (deals board) in the Rex shell. */
+export const HOME_PIPELINE_HREF = "/?nav=pipeline";
+
 /**
  * Read `nav` query values like `/?nav=contacts` from the home page URL.
  * Returns null if missing or not a known shell tab id.
