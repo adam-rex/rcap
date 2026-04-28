@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "kill-port 3000 && next dev -H localhost -p 3000",
-    "dev:clean": "kill-port 3000 && rm -rf .next && next dev -H localhost -p 3000",
-    "dev:webpack": "kill-port 3000 && next dev -H localhost -p 3000 --webpack",
+    "dev": "kill-port 3000 && next dev -H localhost -p 3000 --webpack",
+    "dev:clean": "kill-port 3000 && rm -rf .next && next dev -H localhost -p 3000 --webpack",
+    "dev:turbo": "kill-port 3000 && next dev -H localhost -p 3000",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
