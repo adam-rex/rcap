@@ -271,11 +271,11 @@ export function PipelineDealDetailRoute({ dealId }: { dealId: string }) {
               >
                 {kindLabel(fKind)}
               </span>
-              {deal.stage === "closed" && deal.outcome ? (
+              {fStage === "closed" && fOutcome ? (
                 <span
-                  className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${OUTCOME_PILL[deal.outcome]}`}
+                  className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${OUTCOME_PILL[fOutcome]}`}
                 >
-                  {outcomeLabel(deal.outcome)}
+                  {outcomeLabel(fOutcome)}
                 </span>
               ) : null}
             </div>
@@ -291,7 +291,7 @@ export function PipelineDealDetailRoute({ dealId }: { dealId: string }) {
             <p className="w-full text-[11px] font-medium uppercase tracking-wide text-charcoal-light/80">
               Quick stage
             </p>
-            {STAGES.filter((s) => s.id !== deal.stage).map((target) => (
+            {STAGES.filter((s) => s.id !== fStage).map((target) => (
               <button
                 key={target.id}
                 type="button"

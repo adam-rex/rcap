@@ -3,8 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -H localhost --webpack",
-    "dev:clean": "rm -rf .next && next dev -H localhost --webpack",
+    "dev": "next dev -H localhost",
+    "dev:clean": "rm -rf .next && next dev -H localhost",
+    "dev:webpack": "next dev -H localhost --webpack",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",

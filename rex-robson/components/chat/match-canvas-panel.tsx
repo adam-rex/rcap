@@ -50,10 +50,6 @@ const OUTCOMES: { id: MatchOutcome; label: string }[] = [
   { id: "passed", label: "Passed" },
 ];
 
-function stageLabel(stage: PipelineTransactionStage | null | undefined) {
-  return STAGES.find((s) => s.id === stage)?.label ?? "Active";
-}
-
 function kindLabel(kind: MatchKind) {
   return KINDS.find((k) => k.id === kind)?.label ?? kind;
 }
@@ -110,9 +106,6 @@ export function MatchCanvasPanel() {
 
   const [fMatchId, setFMatchId] = useState("");
   const [fTitle, setFTitle] = useState("");
-  const [fKind, setFKind] = useState<MatchKind>("founder_investor");
-  const [fStage, setFStage] = useState<PipelineTransactionStage>("active");
-  const [fOutcome, setFOutcome] = useState<MatchOutcome | "">("");
   const [fContext, setFContext] = useState("");
   const [fNotes, setFNotes] = useState("");
 
@@ -180,9 +173,6 @@ export function MatchCanvasPanel() {
   const openCreate = () => {
     setFMatchId("");
     setFTitle("");
-    setFKind("founder_investor");
-    setFStage("active");
-    setFOutcome("");
     setFContext("");
     setFNotes("");
     setFormError(null);
@@ -201,10 +191,6 @@ export function MatchCanvasPanel() {
       setFormError("Pick an introduction from Opportunities.");
       return;
     }
-    if (fStage === "closed" && !fOutcome) {
-      setFormError("Pick an outcome to close this deal.");
-      return;
-    }
     setFormBusy(true);
     setFormError(null);
     try {
@@ -218,7 +204,11 @@ export function MatchCanvasPanel() {
           notes: fNotes.trim() === "" ? null : fNotes.trim(),
         }),
       });
-      const data = (await res.json()) as { error?: string; hint?: string };
+      const data = (await res.json()) as {
+        id?: string;
+        error?: string;
+        hint?: string;
+      };
       if (!res.ok) {
         const parts = [data.error, data.hint].filter(
           (x): x is string => typeof x === "string" && x.length > 0,
@@ -226,8 +216,12 @@ export function MatchCanvasPanel() {
         setFormError(parts.length > 0 ? parts.join(" ") : "Could not save.");
         return;
       }
+      const createdId = data.id;
       setFormOpen(false);
       setReloadTick((n) => n + 1);
+      if (typeof createdId === "string" && createdId.length > 0) {
+        router.push(`/pipeline/deals/${createdId}`);
+      }
     } catch {
       setFormError("Network error while saving.");
     } finally {
@@ -521,331 +515,96 @@ export function MatchCanvasPanel() {
 
       <WorkspaceCreateDialog
         open={formOpen}
-        title={formMode === "create" ? "New pipeline deal" : "Edit deal"}
+        title="New pipeline deal"
         onClose={closeForm}
       >
         <form
           onSubmit={onSubmitForm}
           className="space-y-3 p-4"
-          key={`${formMode}-${editingId ?? "new"}`}
+          key="new-deal"
         >
-          {detailLoading ? (
-            <p className="py-6 text-center text-sm text-charcoal-light">
-              Loading…
-            </p>
-          ) : (
-            <>
-              {formMode === "create" ? (
-                <div>
-                  <label
-                    htmlFor="deal-form-opportunity"
-                    className={WORKSPACE_FORM_LABEL_CLASS}
-                  >
-                    Introduction
-                  </label>
-                  <select
-                    id="deal-form-opportunity"
-                    required
-                    value={fMatchId}
-                    onChange={(e) => setFMatchId(e.target.value)}
-                    className={WORKSPACE_FORM_INPUT_CLASS}
-                  >
-                    <option value="">— pick an opportunity —</option>
-                    {opportunityOptions.map((o) => (
-                      <option key={o.id} value={o.id}>
-                        {o.contact_a_name} ↔ {o.contact_b_name}
-                      </option>
-                    ))}
-                  </select>
-                  {opportunitiesLoading ? (
-                    <p className="mt-1 text-[11px] text-charcoal-light/70">
-                      Loading opportunities…
-                    </p>
-                  ) : opportunityOptions.length === 0 ? (
-                    <p className="mt-1 text-[11px] text-charcoal-light/80">
-                      Record an introduction under{" "}
-                      <span className="font-medium text-charcoal">
-                        Opportunities
-                      </span>{" "}
-                      first.
-                    </p>
-                  ) : null}
-                </div>
-              ) : (
-                <div className="rounded-lg border border-charcoal/10 bg-cream-light/40 px-3 py-2">
-                  <p className="text-[11px] font-medium uppercase tracking-wide text-charcoal-light/80">
-                    Pair
-                  </p>
-                  <p className="text-sm font-medium text-charcoal">
-                    {fPairHeadline}
-                  </p>
-                  <span
-                    className={`mt-2 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${KIND_BADGE[fKind]}`}
-                  >
-                    {kindLabel(fKind)}
-                  </span>
-                </div>
-              )}
-              <div>
-                <label
-                  htmlFor="deal-form-title"
-                  className={WORKSPACE_FORM_LABEL_CLASS}
-                >
-                  Deal label (optional)
-                </label>
-                <input
-                  id="deal-form-title"
-                  type="text"
-                  value={fTitle}
-                  onChange={(e) => setFTitle(e.target.value)}
-                  className={WORKSPACE_FORM_INPUT_CLASS}
-                  placeholder="e.g. Series A, venture debt"
-                  autoComplete="off"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label
-                    htmlFor="deal-form-stage"
-                    className={WORKSPACE_FORM_LABEL_CLASS}
-                  >
-                    Stage
-                  </label>
-                  <select
-                    id="deal-form-stage"
-                    value={fStage}
-                    onChange={(e) => {
-                      const next = e.target.value as PipelineTransactionStage;
-                      setFStage(next);
-                      if (next !== "closed") setFOutcome("");
-                    }}
-                    className={WORKSPACE_FORM_INPUT_CLASS}
-                  >
-                    {STAGES.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label
-                    htmlFor="deal-form-outcome"
-                    className={WORKSPACE_FORM_LABEL_CLASS}
-                  >
-                    Outcome {fStage === "closed" ? "*" : "(closed only)"}
-                  </label>
-                  <select
-                    id="deal-form-outcome"
-                    value={fOutcome}
-                    disabled={fStage !== "closed"}
-                    onChange={(e) =>
-                      setFOutcome(e.target.value as MatchOutcome | "")
-                    }
-                    className={WORKSPACE_FORM_INPUT_CLASS}
-                  >
-                    <option value="">— pick outcome —</option>
-                    {OUTCOMES.map((o) => (
-                      <option key={o.id} value={o.id}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label
-                  htmlFor="deal-form-context"
-                  className={WORKSPACE_FORM_LABEL_CLASS}
-                >
-                  Context
-                </label>
-                <textarea
-                  id="deal-form-context"
-                  value={fContext}
-                  onChange={(e) => setFContext(e.target.value)}
-                  rows={3}
-                  className={`${WORKSPACE_FORM_INPUT_CLASS} resize-y`}
-                  placeholder="What is this specific transaction about?"
-                />
-              </div>
-              <div>
-                <label
-                  htmlFor="deal-form-notes"
-                  className={WORKSPACE_FORM_LABEL_CLASS}
-                >
-                  Notes
-                </label>
-                <textarea
-                  id="deal-form-notes"
-                  value={fNotes}
-                  onChange={(e) => setFNotes(e.target.value)}
-                  rows={2}
-                  className={`${WORKSPACE_FORM_INPUT_CLASS} resize-y`}
-                  placeholder="Internal-only notes."
-                />
-              </div>
-              {formMode === "edit" ? (
-                <div className="rounded-lg border border-charcoal/10 bg-cream-light/50 p-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-charcoal-light/90">
-                    Team workspace
-                  </p>
-                  <p className="mt-0.5 text-[11px] text-charcoal-light/75">
-                    Comments and to-dos stay internal — they are not Rex tasks.
-                  </p>
-                  <div className="mt-3">
-                    <p className={WORKSPACE_FORM_LABEL_CLASS}>Comments</p>
-                    <div className="max-h-32 space-y-1.5 overflow-y-auto rounded-md border border-charcoal/10 bg-cream p-2">
-                      {[...fInternalComments].reverse().map((c) => (
-                        <div
-                          key={c.id}
-                          className="rounded border border-charcoal/8 bg-cream-light/40 px-2 py-1.5 text-xs text-charcoal"
-                        >
-                          <p className="whitespace-pre-wrap">{c.body}</p>
-                          <p className="mt-0.5 text-[10px] text-charcoal-light/70">
-                            {formatDealWorkspaceTimestamp(c.created_at)}
-                          </p>
-                        </div>
-                      ))}
-                      {fInternalComments.length === 0 ? (
-                        <p className="text-xs text-charcoal-light/70">
-                          No comments yet.
-                        </p>
-                      ) : null}
-                    </div>
-                    <div className="mt-2 flex gap-2">
-                      <input
-                        type="text"
-                        value={fTeamCommentDraft}
-                        onChange={(e) => setFTeamCommentDraft(e.target.value)}
-                        placeholder="Add a comment…"
-                        className={WORKSPACE_FORM_INPUT_CLASS}
-                        onKeyDown={(e) => {
-                          if (e.key !== "Enter") return;
-                          e.preventDefault();
-                          const t = fTeamCommentDraft.trim();
-                          if (!t) return;
-                          setFInternalComments((prev) => [
-                            ...prev,
-                            {
-                              id: crypto.randomUUID(),
-                              body: t,
-                              created_at: new Date().toISOString(),
-                            },
-                          ]);
-                          setFTeamCommentDraft("");
-                        }}
-                      />
-                      <button
-                        type="button"
-                        className={WORKSPACE_FORM_BTN_SECONDARY}
-                        onClick={() => {
-                          const t = fTeamCommentDraft.trim();
-                          if (!t) return;
-                          setFInternalComments((prev) => [
-                            ...prev,
-                            {
-                              id: crypto.randomUUID(),
-                              body: t,
-                              created_at: new Date().toISOString(),
-                            },
-                          ]);
-                          setFTeamCommentDraft("");
-                        }}
-                      >
-                        Add
-                      </button>
-                    </div>
-                  </div>
-                  <div className="mt-4">
-                    <p className={WORKSPACE_FORM_LABEL_CLASS}>
-                      Internal to-dos
-                    </p>
-                    <ul className="max-h-28 space-y-1.5 overflow-y-auto rounded-md border border-charcoal/10 bg-cream p-2">
-                      {fInternalTodos.map((t) => (
-                        <li
-                          key={t.id}
-                          className="flex items-start gap-2 text-xs text-charcoal"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={t.done}
-                            onChange={() =>
-                              setFInternalTodos((prev) =>
-                                prev.map((x) =>
-                                  x.id === t.id ? { ...x, done: !x.done } : x,
-                                ),
-                              )
-                            }
-                            className="mt-0.5 rounded border-charcoal/25"
-                          />
-                          <span
-                            className={
-                              t.done
-                                ? "text-charcoal-light line-through"
-                                : undefined
-                            }
-                          >
-                            {t.body}
-                          </span>
-                        </li>
-                      ))}
-                      {fInternalTodos.length === 0 ? (
-                        <li className="text-xs text-charcoal-light/70">
-                          No to-dos yet.
-                        </li>
-                      ) : null}
-                    </ul>
-                    <div className="mt-2 flex gap-2">
-                      <input
-                        type="text"
-                        value={fTeamTodoDraft}
-                        onChange={(e) => setFTeamTodoDraft(e.target.value)}
-                        placeholder="Add a to-do…"
-                        className={WORKSPACE_FORM_INPUT_CLASS}
-                        onKeyDown={(e) => {
-                          if (e.key !== "Enter") return;
-                          e.preventDefault();
-                          const t = fTeamTodoDraft.trim();
-                          if (!t) return;
-                          setFInternalTodos((prev) => [
-                            ...prev,
-                            {
-                              id: crypto.randomUUID(),
-                              body: t,
-                              done: false,
-                              created_at: new Date().toISOString(),
-                            },
-                          ]);
-                          setFTeamTodoDraft("");
-                        }}
-                      />
-                      <button
-                        type="button"
-                        className={WORKSPACE_FORM_BTN_SECONDARY}
-                        onClick={() => {
-                          const t = fTeamTodoDraft.trim();
-                          if (!t) return;
-                          setFInternalTodos((prev) => [
-                            ...prev,
-                            {
-                              id: crypto.randomUUID(),
-                              body: t,
-                              done: false,
-                              created_at: new Date().toISOString(),
-                            },
-                          ]);
-                          setFTeamTodoDraft("");
-                        }}
-                      >
-                        Add
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-            </>
-          )}
+          <div>
+            <label
+              htmlFor="deal-form-opportunity"
+              className={WORKSPACE_FORM_LABEL_CLASS}
+            >
+              Introduction
+            </label>
+            <select
+              id="deal-form-opportunity"
+              required
+              value={fMatchId}
+              onChange={(e) => setFMatchId(e.target.value)}
+              className={WORKSPACE_FORM_INPUT_CLASS}
+            >
+              <option value="">— pick an opportunity —</option>
+              {opportunityOptions.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.contact_a_name} ↔ {o.contact_b_name}
+                </option>
+              ))}
+            </select>
+            {opportunitiesLoading ? (
+              <p className="mt-1 text-[11px] text-charcoal-light/70">
+                Loading opportunities…
+              </p>
+            ) : opportunityOptions.length === 0 ? (
+              <p className="mt-1 text-[11px] text-charcoal-light/80">
+                Record an introduction under{" "}
+                <span className="font-medium text-charcoal">Opportunities</span>{" "}
+                first.
+              </p>
+            ) : null}
+          </div>
+          <div>
+            <label
+              htmlFor="deal-form-title"
+              className={WORKSPACE_FORM_LABEL_CLASS}
+            >
+              Deal label (optional)
+            </label>
+            <input
+              id="deal-form-title"
+              type="text"
+              value={fTitle}
+              onChange={(e) => setFTitle(e.target.value)}
+              className={WORKSPACE_FORM_INPUT_CLASS}
+              placeholder="e.g. Series A, venture debt"
+              autoComplete="off"
+            />
+          </div>
+          <div>
+            <label
+              htmlFor="deal-form-context"
+              className={WORKSPACE_FORM_LABEL_CLASS}
+            >
+              Context
+            </label>
+            <textarea
+              id="deal-form-context"
+              value={fContext}
+              onChange={(e) => setFContext(e.target.value)}
+              rows={3}
+              className={`${WORKSPACE_FORM_INPUT_CLASS} resize-y`}
+              placeholder="What is this specific transaction about?"
+            />
+          </div>
+          <div>
+            <label
+              htmlFor="deal-form-notes"
+              className={WORKSPACE_FORM_LABEL_CLASS}
+            >
+              Notes
+            </label>
+            <textarea
+              id="deal-form-notes"
+              value={fNotes}
+              onChange={(e) => setFNotes(e.target.value)}
+              rows={2}
+              className={`${WORKSPACE_FORM_INPUT_CLASS} resize-y`}
+              placeholder="Internal-only notes."
+            />
+          </div>
           {formError ? (
             <p className="text-sm text-red-700/90" role="alert">
               {formError}
@@ -862,14 +621,10 @@ export function MatchCanvasPanel() {
             </button>
             <button
               type="submit"
-              disabled={formBusy || detailLoading}
+              disabled={formBusy}
               className={WORKSPACE_FORM_BTN_PRIMARY}
             >
-              {formBusy
-                ? "Saving…"
-                : formMode === "create"
-                  ? "Add deal"
-                  : "Save changes"}
+              {formBusy ? "Saving…" : "Add deal"}
             </button>
           </div>
         </form>
