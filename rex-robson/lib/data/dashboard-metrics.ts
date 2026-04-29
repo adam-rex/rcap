@@ -1,5 +1,4 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { tryCreateServiceRoleClient } from "@/lib/supabase/service-role";
 import {
   ZERO_DASHBOARD_METRICS,
   ZERO_MATCHES_BY_STAGE,
@@ -15,14 +14,10 @@ import {
 export { ZERO_DASHBOARD_METRICS, type DashboardMetrics };
 
 /**
- * Aggregates for the home dashboard. Uses the service-role client when available so counts work
- * before auth is wired; falls back to the cookie-backed client (RLS + session) otherwise.
+ * Aggregates for the home dashboard (cookie session + RLS).
  */
 export async function getDashboardMetrics(): Promise<DashboardMetrics> {
-  const service = tryCreateServiceRoleClient();
-  const userScoped = await createServerSupabaseClient();
-  const client = service ?? userScoped;
-
+  const client = await createServerSupabaseClient();
   const thirtyDaysAgoIso = new Date(
     Date.now() - 30 * 24 * 60 * 60 * 1000,
   ).toISOString();

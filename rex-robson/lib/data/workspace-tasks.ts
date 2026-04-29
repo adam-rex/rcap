@@ -1,6 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { tryCreateServiceRoleClient } from "@/lib/supabase/service-role";
 import {
   WORKSPACE_TASKS_PAGE_SIZE_DEFAULT,
   WORKSPACE_TASKS_PAGE_SIZE_MAX,
@@ -170,9 +169,8 @@ export async function getWorkspaceTasksPage(params: {
   matchId?: string | null;
   contactId?: string | null;
 }): Promise<WorkspaceTasksPageResult> {
-  const service = tryCreateServiceRoleClient();
-  const userScoped = await createServerSupabaseClient();
-  return fetchWorkspaceTasksPageWithClient(service ?? userScoped, params);
+  const client = await createServerSupabaseClient();
+  return fetchWorkspaceTasksPageWithClient(client, params);
 }
 
 export async function fetchWorkspaceTaskByIdWithClient(

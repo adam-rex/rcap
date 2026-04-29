@@ -1,5 +1,4 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { tryCreateServiceRoleClient } from "@/lib/supabase/service-role";
 import type { RexDashboardStats } from "@/lib/rex/voice";
 import {
   isMissingMatchTransactionsError,
@@ -7,20 +6,10 @@ import {
 } from "./supabase-error-guards";
 
 /**
- * Loads aggregate counts for the Rex greeting. Prefers service role on the server so counts work
- * before auth is wired; falls back to the cookie-backed client (RLS + session).
+ * Loads aggregate counts for the Rex greeting (cookie session + RLS).
  */
 export async function getRexDashboardStats(): Promise<RexDashboardStats> {
-  const service = tryCreateServiceRoleClient();
-  const userScoped = await createServerSupabaseClient();
-  const client = service ?? userScoped;
-
-  if (process.env.NODE_ENV === "development" && !service) {
-    console.warn(
-      "[rex-robson] Supabase: no service role key. Server reads use the anon key; RLS only allows the authenticated role, so counts stay at 0 until you sign in or set SUPABASE_SERVICE_ROLE_KEY in .env.local (restart dev server).",
-    );
-  }
-
+  const client = await createServerSupabaseClient();
   try {
     const contactsReq = client
       .from("contacts")

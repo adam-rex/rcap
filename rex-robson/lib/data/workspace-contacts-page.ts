@@ -1,6 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { tryCreateServiceRoleClient } from "@/lib/supabase/service-role";
 import type {
   WorkspaceContactPageRow,
   WorkspaceContactsPageResult,
@@ -177,8 +176,6 @@ export async function getWorkspaceContactsPage(params: {
   role: string | null;
   organisationType: string | null;
 }): Promise<WorkspaceContactsPageResult> {
-  const service = tryCreateServiceRoleClient();
-  const userScoped = await createServerSupabaseClient();
-  const client = service ?? userScoped;
+  const client = await createServerSupabaseClient();
   return fetchWorkspaceContactsPageWithClient(client, params);
 }

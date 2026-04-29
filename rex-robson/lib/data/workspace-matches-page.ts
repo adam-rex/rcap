@@ -1,6 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { tryCreateServiceRoleClient } from "@/lib/supabase/service-role";
 import { isMissingPipelineInternalWorkspaceColumnsError } from "./supabase-error-guards";
 import {
   WORKSPACE_MATCHES_PAGE_SIZE_MAX,
@@ -195,8 +194,6 @@ export async function getWorkspaceMatchesPage(params: {
   page: number;
   pageSize: number;
 }): Promise<WorkspaceMatchesPageResult> {
-  const service = tryCreateServiceRoleClient();
-  const userScoped = await createServerSupabaseClient();
-  const client = service ?? userScoped;
+  const client = await createServerSupabaseClient();
   return fetchWorkspaceMatchesPageWithClient(client, params);
 }

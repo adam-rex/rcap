@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import type { DashboardMetrics } from "@/lib/data/dashboard-metrics.types";
 import type { WorkspaceLists } from "@/lib/data/workspace-lists";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { RexDashboardStats } from "@/lib/rex/voice";
 import { ChatComposer } from "./chat-composer";
 import { ChatMessageList, type ChatMessage } from "./chat-message-list";
@@ -100,6 +101,13 @@ export function ChatShell({
   const onPendingEmailDetailHandled = useCallback(() => {
     setPendingEmailDetailId(null);
   }, []);
+
+  const onSignOut = useCallback(async () => {
+    const supabase = createSupabaseBrowserClient();
+    await supabase.auth.signOut();
+    router.push("/login");
+    router.refresh();
+  }, [router]);
 
   const onSubmitSearch = useCallback(async (query: string, files: File[]) => {
     const userId =
@@ -200,17 +208,26 @@ export function ChatShell({
               aria-label="Online"
             />
           </div>
-          <div className="min-w-0 flex-1">
-            <h1 className="truncate font-serif text-lg tracking-tight text-charcoal lg:hidden">
-              {chatNavLabel(activeNav)}
-            </h1>
-            <p className="text-xs text-charcoal-light/80 lg:hidden">Online</p>
-            <h1 className="hidden truncate font-serif text-lg tracking-tight text-charcoal lg:block">
-              Rex
-            </h1>
-            <p className="hidden text-xs text-charcoal-light/80 lg:block">
-              Online
-            </p>
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <h1 className="truncate font-serif text-lg tracking-tight text-charcoal lg:hidden">
+                {chatNavLabel(activeNav)}
+              </h1>
+              <p className="text-xs text-charcoal-light/80 lg:hidden">Online</p>
+              <h1 className="hidden truncate font-serif text-lg tracking-tight text-charcoal lg:block">
+                Rex
+              </h1>
+              <p className="hidden text-xs text-charcoal-light/80 lg:block">
+                Online
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void onSignOut()}
+              className="shrink-0 rounded-lg border border-charcoal/[0.15] bg-cream-light/90 px-2.5 py-1.5 text-xs font-medium text-charcoal hover:bg-charcoal/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-charcoal/25"
+            >
+              Sign out
+            </button>
           </div>
           {!quickCaptureOpen ? (
             <button

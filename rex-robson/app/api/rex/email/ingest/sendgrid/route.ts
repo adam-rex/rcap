@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ingestForwardedEmail } from "@/lib/email/ingest";
 import { verifySendGridIngestSecret } from "@/lib/email/ingest-route-auth";
 import { sendGridFormDataToIngestInput } from "@/lib/email/sendgrid-inbound";
-import { getWorkspaceWriteClient } from "@/lib/data/workspace-mutations";
+import { tryCreateServiceRoleClient } from "@/lib/supabase/service-role";
 
 export const runtime = "nodejs";
 
@@ -38,7 +38,16 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const client = await getWorkspaceWriteClient();
+    const client = tryCreateServiceRoleClient();
+    if (!client) {
+      return NextResponse.json(
+        {
+          error:
+            "Server misconfigured: SUPABASE_SERVICE_ROLE_KEY is required for SendGrid inbound parse (no user session on webhooks).",
+        },
+        { status: 503 },
+      );
+    }
     const result = await ingestForwardedEmail(client, input);
     return NextResponse.json({
       ok: true,

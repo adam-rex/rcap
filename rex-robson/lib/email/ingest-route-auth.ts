@@ -22,6 +22,10 @@ function matchesGenericWebhookSecret(req: Request, secret: string): boolean {
   return q === secret || h === secret;
 }
 
+export type GenericEmailIngestAccess =
+  | { ok: true; via: "development" | "secret" | "session" }
+  | { ok: false };
+
 /**
  * POST /api/rex/email/ingest — browser quick-capture (logged-in session) or
  * relay with REX_EMAIL_INGEST_SECRET via ?secret= or X-Rex-Ingest-Secret.
@@ -31,17 +35,20 @@ function matchesGenericWebhookSecret(req: Request, secret: string): boolean {
  */
 export async function verifyGenericEmailIngestAccess(
   req: Request,
-): Promise<boolean> {
+): Promise<GenericEmailIngestAccess> {
   if (process.env.NODE_ENV !== "production") {
-    return true;
+    return { ok: true, via: "development" };
   }
   const webhookSecret = process.env.REX_EMAIL_INGEST_SECRET;
   if (webhookSecret && matchesGenericWebhookSecret(req, webhookSecret)) {
-    return true;
+    return { ok: true, via: "secret" };
   }
   const supabase = await createServerSupabaseClient();
   const {
     data: { session },
   } = await supabase.auth.getSession();
-  return !!session;
+  if (session) {
+    return { ok: true, via: "session" };
+  }
+  return { ok: false };
 }

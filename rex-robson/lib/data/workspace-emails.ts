@@ -1,6 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { tryCreateServiceRoleClient } from "@/lib/supabase/service-role";
 import type {
   WorkspaceEmailAttachmentRow,
   WorkspaceEmailDetail,
@@ -194,9 +193,7 @@ export async function getWorkspaceEmailsPage(params: {
   pageSize: number;
   mailbox?: "emails" | "call_logs";
 }): Promise<WorkspaceEmailsPageResult> {
-  const service = tryCreateServiceRoleClient();
-  const userScoped = await createServerSupabaseClient();
-  const client = service ?? userScoped;
+  const client = await createServerSupabaseClient();
   return fetchWorkspaceEmailsPageWithClient(client, params);
 }
 
@@ -283,9 +280,7 @@ export async function fetchWorkspaceEmailDetailWithClient(
 export async function fetchWorkspaceEmailDetail(
   id: string,
 ): Promise<WorkspaceEmailDetail | null> {
-  const service = tryCreateServiceRoleClient();
-  const userScoped = await createServerSupabaseClient();
-  const client = service ?? userScoped;
+  const client = await createServerSupabaseClient();
   return fetchWorkspaceEmailDetailWithClient(client, id);
 }
 

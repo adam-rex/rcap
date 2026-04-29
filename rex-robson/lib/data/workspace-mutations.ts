@@ -1,6 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { tryCreateServiceRoleClient } from "@/lib/supabase/service-role";
 import {
   fetchWorkspaceTaskByIdWithClient,
   mapTaskRow,
@@ -24,8 +23,9 @@ import type {
   PipelineInternalTodo,
 } from "./workspace-matches-page.types";
 
+/** Cookie-backed client only — workspace APIs rely on RLS + signed-in user. */
 export async function getWorkspaceWriteClient(): Promise<SupabaseClient> {
-  return tryCreateServiceRoleClient() ?? (await createServerSupabaseClient());
+  return createServerSupabaseClient();
 }
 
 export type CreatedOrganisationRow = {

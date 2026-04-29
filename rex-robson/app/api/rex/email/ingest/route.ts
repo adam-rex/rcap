@@ -4,7 +4,7 @@ import {
   type IngestEmailInput,
 } from "@/lib/email/ingest";
 import { verifyGenericEmailIngestAccess } from "@/lib/email/ingest-route-auth";
-import { getWorkspaceWriteClient } from "@/lib/data/workspace-mutations";
+import { getEmailIngestSupabaseClient } from "@/lib/supabase/ingest-client";
 
 export const runtime = "nodejs";
 
@@ -125,7 +125,8 @@ async function buildJsonOrRawInput(
 }
 
 export async function POST(req: Request) {
-  if (!(await verifyGenericEmailIngestAccess(req))) {
+  const access = await verifyGenericEmailIngestAccess(req);
+  if (!access.ok) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -141,7 +142,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    const client = await getWorkspaceWriteClient();
+    const client = await getEmailIngestSupabaseClient(access.via);
     const result = await ingestForwardedEmail(client, input);
     return NextResponse.json({
       ok: true,
@@ -152,6 +153,18 @@ export async function POST(req: Request) {
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Email ingest failed";
+    if (
+      typeof message === "string" &&
+      message.includes("SUPABASE_SERVICE_ROLE_KEY")
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Server misconfigured: set SUPABASE_SERVICE_ROLE_KEY for webhook ingest without a user session.",
+        },
+        { status: 503 },
+      );
+    }
     if (process.env.NODE_ENV !== "production") {
       console.error("[rex-robson] POST email ingest:", e);
     }

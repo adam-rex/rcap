@@ -1,5 +1,4 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { tryCreateServiceRoleClient } from "@/lib/supabase/service-role";
 import type { MatchKind, OpportunityStage } from "./workspace-matches-page.types";
 
 const LIST_LIMIT = 80;
@@ -58,20 +57,10 @@ function parseKind(raw: unknown): MatchKind | null {
 }
 
 /**
- * Loads recent rows for sidebar surfaces. Uses service role when set (same as dashboard counts)
- * so lists work before auth; otherwise anon + RLS (typically empty until login).
+ * Loads recent rows for sidebar surfaces (cookie session + RLS).
  */
 export async function getWorkspaceLists(): Promise<WorkspaceLists> {
-  const service = tryCreateServiceRoleClient();
-  const userScoped = await createServerSupabaseClient();
-  const client = service ?? userScoped;
-
-  if (process.env.NODE_ENV === "development" && !service) {
-    console.warn(
-      "[rex-robson] Supabase: no service role key — workspace lists use anon + RLS and will be empty without an authenticated session. Set SUPABASE_SERVICE_ROLE_KEY in .env.local.",
-    );
-  }
-
+  const client = await createServerSupabaseClient();
   try {
     const matchesSelect =
       "id,contact_a_id,contact_b_id,kind,stage,context," +

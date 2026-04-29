@@ -1,6 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { tryCreateServiceRoleClient } from "@/lib/supabase/service-role";
 import type { MatchKind, OpportunityStage } from "./workspace-matches-page.types";
 import { WORKSPACE_MATCHES_PAGE_SIZE_MAX } from "./workspace-matches-page.types";
 import {
@@ -151,9 +150,7 @@ export async function fetchWorkspaceOpportunitiesWithClient(
 export async function getWorkspaceOpportunities(): Promise<
   WorkspaceOpportunityRow[]
 > {
-  const service = tryCreateServiceRoleClient();
-  const userScoped = await createServerSupabaseClient();
-  const client = service ?? userScoped;
+  const client = await createServerSupabaseClient();
   return fetchWorkspaceOpportunitiesWithClient(client);
 }
 
@@ -250,8 +247,6 @@ export async function getWorkspaceMatchPairsPage(params: {
   page: number;
   pageSize: number;
 }): Promise<{ rows: WorkspaceMatchPickerRow[]; total: number }> {
-  const service = tryCreateServiceRoleClient();
-  const userScoped = await createServerSupabaseClient();
-  const client = service ?? userScoped;
+  const client = await createServerSupabaseClient();
   return fetchWorkspaceMatchPairsPageWithClient(client, params);
 }

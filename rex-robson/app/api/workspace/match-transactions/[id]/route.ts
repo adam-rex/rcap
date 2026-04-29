@@ -7,7 +7,6 @@ import {
   updateWorkspaceMatchTransaction,
 } from "@/lib/data/workspace-mutations";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { tryCreateServiceRoleClient } from "@/lib/supabase/service-role";
 import {
   normalizeInternalComments,
   normalizeInternalTodos,
@@ -74,9 +73,7 @@ export async function GET(_req: Request, context: RouteContext) {
   }
 
   try {
-    const service = tryCreateServiceRoleClient();
-    const userScoped = await createServerSupabaseClient();
-    const client = service ?? userScoped;
+    const client = await createServerSupabaseClient();
 
     const selectFull =
       "id,match_id,title,stage,outcome,context,notes,internal_comments,internal_todos," +
