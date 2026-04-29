@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { insertWorkspaceSuggestion } from "@/lib/data/workspace-mutations";
 
 /** Minimum raw `scorePair()` total for a pair to surface as a suggestion (see `@/lib/match/suggestion-score` for 1–5 tiers). */
-const MIN_SCORE = 5;
+const MIN_SCORE = 7;
 const PER_FOUNDER_CAP = 4;
 const PER_CAPITAL_CAP = 3;
 const GLOBAL_CAP = 25;
@@ -93,15 +93,19 @@ function titleCase(s: string): string {
   return s.replace(/\b\w/g, (ch) => ch.toUpperCase());
 }
 
+function hasDealSizeInfo(c: ContactForMatch): boolean {
+  return c.min_deal_size != null || c.max_deal_size != null;
+}
+
 function sizeRangesOverlap(
   a: ContactForMatch,
   b: ContactForMatch,
 ): { capMin: number; capMax: number; foundMin: number; foundMax: number } | null {
+  if (!hasDealSizeInfo(a) || !hasDealSizeInfo(b)) return null;
   const aMin = a.min_deal_size;
   const aMax = a.max_deal_size;
   const bMin = b.min_deal_size;
   const bMax = b.max_deal_size;
-  if (aMin == null && aMax == null && bMin == null && bMax == null) return null;
   const lowA = aMin ?? 0;
   const highA = aMax ?? Number.POSITIVE_INFINITY;
   const lowB = bMin ?? 0;
@@ -139,8 +143,8 @@ function scorePair(
 
   const sectorOverlap = intersect(sectorSet(founder), sectorSet(capital));
   if (sectorOverlap.length > 0) {
-    const bump = Math.min(sectorOverlap.length, 2) * 2;
-    score += bump;
+    score += 7;
+    if (sectorOverlap.length >= 2) score += 1;
     reasons.push(`Sector: ${sectorOverlap.map(titleCase).join(", ")}`);
   }
 
@@ -180,6 +184,10 @@ function scorePair(
   if (fDays != null && cDays != null && fDays > COLD_DAYS && cDays > COLD_DAYS) {
     score -= 1;
     reasons.push(`Cold: both last contacted >${COLD_DAYS}d ago`);
+  }
+
+  if (sectorOverlap.length > 0) {
+    score = Math.max(score, MIN_SCORE);
   }
 
   return {

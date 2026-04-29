@@ -2,18 +2,22 @@
  * Intro suggestion **match fit** (shown as X/5 in the app) is derived from a
  * heuristic `scorePair()` in `lib/data/intro-match-suggestions.ts`:
  *
- * - **Sector overlap** (up to 4): shared sector tags between founder and capital.
- * - **Deal type overlap** (up to 4): shared deal-type tags.
- * - **Cheque / deal size** (+3): min/max deal ranges intersect.
- * - **Geography** (+2): at least one shared geography token.
+ * - **Sector overlap** (+7, +1 extra when two or more tags overlap): enough on
+ *   its own to surface a suggestion; maps to at least tier 2 in the UI.
+ * - **Deal type overlap** (up to 4): shared deal-type tags; empty on either
+ *   side is neutral (compatible), not a mismatch.
+ * - **Cheque / deal size** (+3): min/max ranges intersect only when **both**
+ *   contacts have at least one bound; otherwise no points (unknown / compatible).
+ * - **Geography** (+2): shared geography tokens when both sides have tokens.
  * - **Warm relationship** (+1): either side has `relationship_score` ≥ 7.
- * - **Stale on both sides** (−1): both last contacted more than 365 days ago.
+ * - **Stale on both sides** (−1): both last contacted more than 365 days ago
+ *   (sector overlap is floored to `MIN_SCORE` so a sector match is not dropped).
  *
- * Pairs must reach `MIN_SCORE` (currently 5) before they become suggestions.
+ * Pairs must reach `MIN_SCORE` (currently 7) before they become suggestions.
  * The raw integer is then **bucketed** into five tiers so the UI stays readable.
  *
- * Thresholds are chosen so higher tiers require more signals to align at once
- * (typical raw range ≈ 5–14).
+ * Thresholds are chosen so tier 2 is typically sector-led; tiers 3–5 add
+ * overlapping deal type, geography, and/or cheque fit (typical raw ≈ 7–14+).
  */
 
 export type MatchFitTier = 1 | 2 | 3 | 4 | 5;
