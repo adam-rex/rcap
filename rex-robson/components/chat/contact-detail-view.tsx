@@ -527,10 +527,9 @@ export function ContactDetailView({
     .filter((x): x is string => typeof x === "string" && x.length > 0)
     .join(" · ");
 
+  const contactTypeTrimmed = (contact.contact_type ?? "").trim();
   const typeBadge =
-    contact.contact_type?.trim().length > 0
-      ? contact.contact_type.trim()
-      : "Not set";
+    contactTypeTrimmed.length > 0 ? contactTypeTrimmed : "Not set";
 
   const shellClass = isPage
     ? "min-h-dvh w-full bg-cream pb-10 pt-[env(safe-area-inset-top,0px)]"
@@ -697,8 +696,8 @@ export function ContactDetailView({
                 <p className="mt-1 min-h-[3rem] whitespace-pre-wrap text-sm leading-relaxed text-charcoal">
                   {loading
                     ? "…"
-                    : detail?.notes?.trim()
-                      ? detail.notes
+                    : (detail?.notes ?? "").trim() !== ""
+                      ? detail?.notes ?? ""
                       : "Not set"}
                 </p>
               </div>
