@@ -243,7 +243,7 @@ function ContactsBrowsePanelInner({
   };
 
   return (
-    <div className="flex flex-col px-4 py-6 sm:px-8">
+    <div className="flex w-full min-w-0 flex-col px-4 py-6 sm:px-8">
       <div className="shrink-0">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 flex-1">

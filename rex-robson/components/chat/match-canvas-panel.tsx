@@ -352,7 +352,7 @@ export function MatchCanvasPanel() {
   }, [rows]);
 
   return (
-    <div className="flex flex-col px-4 py-6 sm:px-8">
+    <div className="flex w-full min-w-0 flex-col px-4 py-6 sm:px-8">
       <div className="shrink-0">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
@@ -397,8 +397,8 @@ export function MatchCanvasPanel() {
         </p>
       ) : null}
 
-      <div className="mt-4 overflow-x-auto rounded-xl border border-charcoal/8 bg-cream-light/40 p-3">
-        <div className="grid min-w-[560px] grid-cols-2 gap-3">
+      <div className="mt-4 rounded-xl border border-charcoal/8 bg-cream-light/40 p-3 sm:overflow-x-auto">
+        <div className="grid grid-cols-1 gap-3 sm:min-w-[560px] sm:grid-cols-2">
           {stageColumns.map((column) => (
             <section
               key={column.id}

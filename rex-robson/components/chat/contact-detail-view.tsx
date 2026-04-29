@@ -532,12 +532,12 @@ export function ContactDetailView({
     contactTypeTrimmed.length > 0 ? contactTypeTrimmed : "Not set";
 
   const shellClass = isPage
-    ? "min-h-dvh w-full bg-cream pb-10 pt-[env(safe-area-inset-top,0px)]"
-    : "flex flex-col";
+    ? "min-h-dvh w-full max-w-[100%] overflow-x-hidden bg-cream pb-10 pt-[env(safe-area-inset-top,0px)]"
+    : "flex min-w-0 w-full flex-col";
 
   const innerClass = isPage
-    ? "mx-auto w-full max-w-5xl px-4 py-6 sm:px-8"
-    : "flex flex-col px-4 py-6 sm:px-8";
+    ? "mx-auto w-full min-w-0 max-w-5xl px-4 py-6 sm:px-8"
+    : "flex min-w-0 w-full max-w-full flex-col px-4 py-6 sm:px-8";
 
   const BackControl = isPage ? (
     <Link

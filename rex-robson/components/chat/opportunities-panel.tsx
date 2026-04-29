@@ -414,7 +414,7 @@ export function OpportunitiesPanel() {
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-6 sm:px-8">
+    <div className="flex min-h-0 min-w-0 w-full flex-1 flex-col overflow-hidden px-4 py-6 sm:px-8">
       <div className="mb-4 shrink-0">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>

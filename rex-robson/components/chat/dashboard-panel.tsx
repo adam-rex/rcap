@@ -330,7 +330,7 @@ export function DashboardPanel({
       : "Inbox is clear — run Generate matches";
 
   return (
-    <div className="flex flex-col px-4 py-6 sm:px-8">
+    <div className="flex w-full min-w-0 flex-col px-4 py-6 sm:px-8">
       <div className="shrink-0">
         <h2 className="font-serif text-xl tracking-tight text-charcoal">
           Dashboard

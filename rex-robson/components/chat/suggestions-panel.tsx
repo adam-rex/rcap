@@ -250,7 +250,7 @@ export function SuggestionsPanel({ rows, isEmpty }: SuggestionsPanelProps) {
         : "Refresh suggestions";
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col px-4 py-6 sm:px-8">
+    <div className="flex min-h-0 min-w-0 w-full flex-1 flex-col px-4 py-6 sm:px-8">
       <div className="mb-4 flex shrink-0 items-start justify-between gap-3">
         <div>
           <h2 className="font-serif text-xl tracking-tight text-charcoal">

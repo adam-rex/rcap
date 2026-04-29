@@ -251,7 +251,7 @@ export function PipelineDealDetailRoute({ dealId }: { dealId: string }) {
   }
 
   return (
-    <div className="min-h-dvh bg-cream">
+    <div className="min-h-dvh overflow-x-hidden bg-cream">
       <header className="sticky top-0 z-10 border-b border-charcoal/[0.06] bg-cream/95 px-4 py-3 backdrop-blur-sm sm:px-8">
         <div className="mx-auto flex max-w-3xl flex-wrap items-center gap-3">
           <Link

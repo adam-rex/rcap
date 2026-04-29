@@ -22,5 +22,10 @@
 }
 
 body {
-  @apply min-h-full bg-cream font-sans text-charcoal antialiased;
+  @apply min-h-full overflow-x-clip bg-cream font-sans text-charcoal antialiased;
+}
+
+html {
+  overflow-x: clip;
+  /* Prevent iOS from letting wide children widen the layout and break vertical scroll. */
 }
