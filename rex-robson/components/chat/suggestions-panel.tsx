@@ -19,6 +19,10 @@ import { rexEmptySuggestions } from "@/lib/rex/voice";
 import type { WorkspaceSuggestionRow } from "@/lib/data/workspace-lists";
 import type { MatchKind } from "@/lib/data/workspace-matches-page.types";
 import { stripWorkspaceMarkdownDecorators } from "@/lib/format/workspace-display-text";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { ContactPairGeographyLine } from "./contact-pair-geography";
+import { createWhyFitMarkdownComponents } from "./match-context-markdown";
 
 const LAST_RUN_STORAGE_KEY = "rex:suggestions:lastRun";
 const THROTTLE_MS = 60_000;
@@ -39,17 +43,6 @@ const KIND_LABEL: Record<MatchKind, string> = {
   founder_investor: "Founder · Investor",
   founder_lender: "Founder · Lender",
 };
-
-function muted(line: string | null | undefined) {
-  if (line == null || line === "") return null;
-  const cleaned = stripWorkspaceMarkdownDecorators(line);
-  if (cleaned === "") return null;
-  return (
-    <p className="mt-0.5 whitespace-pre-line line-clamp-6 text-xs text-charcoal-light/85">
-      {cleaned}
-    </p>
-  );
-}
 
 function formatRelative(ts: number): string {
   const diff = Date.now() - ts;
@@ -503,6 +496,7 @@ export function SuggestionsPanel({ rows, isEmpty }: SuggestionsPanelProps) {
           <ul className="divide-y divide-charcoal/[0.06]">
             {visibleRows.map((s) => {
               const acting = pendingActionIds.has(s.id);
+              const bodyMd = s.body?.trim() ?? "";
               const hasPair =
                 Boolean(s.contact_a_name) && Boolean(s.contact_b_name);
               const headline = hasPair
@@ -528,6 +522,14 @@ export function SuggestionsPanel({ rows, isEmpty }: SuggestionsPanelProps) {
                     <p className="text-sm font-medium text-charcoal">
                       {headline}
                     </p>
+                    {hasPair ? (
+                      <ContactPairGeographyLine
+                        contactAName={s.contact_a_name ?? ""}
+                        contactBName={s.contact_b_name ?? ""}
+                        contactAGeography={s.contact_a_geography}
+                        contactBGeography={s.contact_b_geography}
+                      />
+                    ) : null}
                     <div className="mt-1 flex flex-wrap items-center gap-1.5">
                       {s.kind ? (
                         <span className="inline-flex items-center rounded-full border border-charcoal/15 bg-charcoal/5 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-charcoal">
@@ -553,7 +555,18 @@ export function SuggestionsPanel({ rows, isEmpty }: SuggestionsPanelProps) {
                         {subtitleClean}
                       </p>
                     ) : null}
-                    {muted(s.body)}
+                    {bodyMd ? (
+                      <div className="mt-2 rounded-md border border-charcoal/[0.08] bg-muted/30 p-3 text-[13px] leading-relaxed text-charcoal-light/90">
+                        <div className="max-h-48 overflow-y-auto [&_.my-1:first-child]:mt-0 [&_h2]:mt-0">
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm]}
+                            components={createWhyFitMarkdownComponents()}
+                          >
+                            {bodyMd}
+                          </ReactMarkdown>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                   <div className="flex shrink-0 items-center gap-1.5">
                     {activeTab === "live" ? (

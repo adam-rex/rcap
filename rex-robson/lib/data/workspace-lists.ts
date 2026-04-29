@@ -31,6 +31,8 @@ export type WorkspaceSuggestionRow = {
   contact_b_id: string | null;
   contact_a_name: string | null;
   contact_b_name: string | null;
+  contact_a_geography: string | null;
+  contact_b_geography: string | null;
   kind: MatchKind | null;
   score: number | null;
 };
@@ -77,8 +79,8 @@ export async function getWorkspaceLists(): Promise<WorkspaceLists> {
       "contact_b:contacts!matches_contact_b_id_fkey(name)";
     const suggestionsSelect =
       "id,title,body,status,contact_a_id,contact_b_id,kind,score," +
-      "contact_a:contacts!suggestions_contact_a_id_fkey(name)," +
-      "contact_b:contacts!suggestions_contact_b_id_fkey(name)";
+      "contact_a:contacts!suggestions_contact_a_id_fkey(name,geography)," +
+      "contact_b:contacts!suggestions_contact_b_id_fkey(name,geography)";
 
     const [orgsRes, matchesRes, suggestionsRes] = await Promise.all([
       client
@@ -138,8 +140,8 @@ export async function getWorkspaceLists(): Promise<WorkspaceLists> {
           contact_b_id: string | null;
           kind: string | null;
           score: number | string | null;
-          contact_a: { name: string | null } | null;
-          contact_b: { name: string | null } | null;
+          contact_a: { name: string | null; geography?: string | null } | null;
+          contact_b: { name: string | null; geography?: string | null } | null;
         };
         const score =
           typeof r.score === "number"
@@ -158,6 +160,16 @@ export async function getWorkspaceLists(): Promise<WorkspaceLists> {
             r.contact_b_id == null ? null : String(r.contact_b_id),
           contact_a_name: r.contact_a?.name ?? null,
           contact_b_name: r.contact_b?.name ?? null,
+          contact_a_geography:
+            r.contact_a?.geography == null ||
+            String(r.contact_a.geography).trim() === ""
+              ? null
+              : String(r.contact_a.geography).trim(),
+          contact_b_geography:
+            r.contact_b?.geography == null ||
+            String(r.contact_b.geography).trim() === ""
+              ? null
+              : String(r.contact_b.geography).trim(),
           kind: parseKind(r.kind),
           score,
         };

@@ -14,6 +14,10 @@ export type WorkspaceOpportunityRow = {
   contact_b_id: string;
   contact_a_name: string;
   contact_b_name: string;
+  contact_a_sector: string | null;
+  contact_b_sector: string | null;
+  contact_a_geography: string | null;
+  contact_b_geography: string | null;
   kind: MatchKind;
   context: string | null;
   notes: string | null;
@@ -37,19 +41,19 @@ type RawOpp = {
   suggestion_id: string | null;
   introduction_at: string | null;
   introduction_notes: string | null;
-  contact_a: { name: string | null } | null;
-  contact_b: { name: string | null } | null;
+  contact_a: { name: string | null; sector?: string | null; geography?: string | null } | null;
+  contact_b: { name: string | null; sector?: string | null; geography?: string | null } | null;
 };
 
 const OPPORTUNITIES_SELECT_FULL =
   "id,contact_a_id,contact_b_id,kind,context,notes,suggestion_id,introduction_at,introduction_notes," +
-  "contact_a:contacts!matches_contact_a_id_fkey(name)," +
-  "contact_b:contacts!matches_contact_b_id_fkey(name)";
+  "contact_a:contacts!matches_contact_a_id_fkey(name,sector,geography)," +
+  "contact_b:contacts!matches_contact_b_id_fkey(name,sector,geography)";
 
 const OPPORTUNITIES_SELECT_LEGACY =
   "id,contact_a_id,contact_b_id,kind,context,notes,suggestion_id," +
-  "contact_a:contacts!matches_contact_a_id_fkey(name)," +
-  "contact_b:contacts!matches_contact_b_id_fkey(name)";
+  "contact_a:contacts!matches_contact_a_id_fkey(name,sector,geography)," +
+  "contact_b:contacts!matches_contact_b_id_fkey(name,sector,geography)";
 
 export async function fetchWorkspaceOpportunitiesWithClient(
   client: SupabaseClient,
@@ -109,6 +113,24 @@ export async function fetchWorkspaceOpportunitiesWithClient(
     contact_b_id: String(m.contact_b_id),
     contact_a_name: m.contact_a?.name ?? "(unknown)",
     contact_b_name: m.contact_b?.name ?? "(unknown)",
+    contact_a_sector:
+      m.contact_a?.sector == null || String(m.contact_a.sector).trim() === ""
+        ? null
+        : String(m.contact_a.sector).trim(),
+    contact_b_sector:
+      m.contact_b?.sector == null || String(m.contact_b.sector).trim() === ""
+        ? null
+        : String(m.contact_b.sector).trim(),
+    contact_a_geography:
+      m.contact_a?.geography == null ||
+      String(m.contact_a.geography).trim() === ""
+        ? null
+        : String(m.contact_a.geography).trim(),
+    contact_b_geography:
+      m.contact_b?.geography == null ||
+      String(m.contact_b.geography).trim() === ""
+        ? null
+        : String(m.contact_b.geography).trim(),
     kind: parseKind(m.kind),
     context: m.context == null ? null : String(m.context),
     notes: m.notes == null ? null : String(m.notes),

@@ -287,8 +287,9 @@ function buildSuggestionBody(c: Candidate): string {
   if (capitalLine) warmth.push(`- ${c.capital.name}: ${capitalLine}`);
 
   const lines: string[] = [headline];
-  if (why.length > 0) lines.push("", "Why this match", ...why);
-  if (warmth.length > 0) lines.push("", "Warmth", ...warmth);
+  if (why.length > 0)
+    lines.push("", "## Why this match", "", ...why);
+  if (warmth.length > 0) lines.push("", "## Warmth", "", ...warmth);
   return lines.join("\n");
 }
 
