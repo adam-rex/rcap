@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { parseContactUpsertBody } from "@/lib/api/workspace-entity-bodies";
 import { readJsonObject } from "@/lib/api/workspace-post-parse";
 import { sanitizeWorkspaceListSearch } from "@/lib/data/workspace-search-sanitize";
+import { parseSectorsQuery } from "@/lib/constants/sectors";
 import {
   getWorkspaceContactsPage,
   WORKSPACE_CONTACTS_PAGE_SIZE_DEFAULT,
@@ -62,6 +63,11 @@ export async function GET(req: Request) {
     url.searchParams.get("organisationType") ??
     url.searchParams.get("orgType") ??
     "";
+  const contactTypeRaw =
+    url.searchParams.get("contactType") ??
+    url.searchParams.get("contact_type") ??
+    "";
+  const sectorsRaw = url.searchParams.get("sectors") ?? "";
   const pageRaw = url.searchParams.get("page");
   const sizeRaw = url.searchParams.get("pageSize") ?? url.searchParams.get("limit");
 
@@ -87,6 +93,8 @@ export async function GET(req: Request) {
   const search = sanitizeWorkspaceListSearch(qRaw);
   const role = sanitizeWorkspaceListSearch(roleRaw);
   const organisationType = sanitizeWorkspaceListSearch(organisationTypeRaw);
+  const contactType = sanitizeWorkspaceListSearch(contactTypeRaw);
+  const sectors = parseSectorsQuery(sectorsRaw);
 
   try {
     const result = await getWorkspaceContactsPage({
@@ -95,6 +103,8 @@ export async function GET(req: Request) {
       pageSize,
       role,
       organisationType,
+      contactType,
+      sectors,
     });
     return NextResponse.json(result);
   } catch (e) {

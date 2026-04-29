@@ -141,6 +141,8 @@ export async function fetchWorkspaceContactsPageWithClient(
     pageSize: number;
     role: string | null;
     organisationType: string | null;
+    contactType: string | null;
+    sectors: string[];
   },
 ): Promise<WorkspaceContactsPageResult> {
   const page = Math.max(1, Math.floor(params.page));
@@ -155,6 +157,8 @@ export async function fetchWorkspaceContactsPageWithClient(
     p_page_size: pageSize,
     p_role: params.role ?? "",
     p_organisation_type: params.organisationType ?? "",
+    p_contact_type: params.contactType ?? "",
+    p_sectors: params.sectors,
   });
 
   if (error) {
@@ -175,6 +179,8 @@ export async function getWorkspaceContactsPage(params: {
   pageSize: number;
   role: string | null;
   organisationType: string | null;
+  contactType: string | null;
+  sectors: string[];
 }): Promise<WorkspaceContactsPageResult> {
   const client = await createServerSupabaseClient();
   return fetchWorkspaceContactsPageWithClient(client, params);

@@ -1,16 +1,27 @@
 "use client";
 
 import { Plus, Tag } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useState,
+} from "react";
+import { WORKSPACE_CONTACT_TYPES } from "@/lib/constants/contact-types";
+import {
+  WORKSPACE_SECTOR_LABEL,
+  WORKSPACE_SECTOR_SLUGS,
+  formatSectorsQuery,
+  parseSectorsQuery,
+  type WorkspaceSectorSlug,
+} from "@/lib/constants/sectors";
 import {
   WORKSPACE_CONTACTS_PAGE_SIZE_DEFAULT,
   type WorkspaceContactPageRow,
 } from "@/lib/data/workspace-contacts.types";
-import {
-  WORKSPACE_ORGANISATIONS_PAGE_SIZE_MAX,
-  type WorkspaceOrganisationPageRow,
-} from "@/lib/data/workspace-organisations-page.types";
 import { ContactUpsertDialog } from "./contact-upsert-dialog";
 import { WorkspaceBrowsePagination } from "./workspace-browse-pagination";
 import { WORKSPACE_BROWSE_ROW_BUTTON_CLASS } from "./workspace-create-dialog";
@@ -65,6 +76,11 @@ function recencyLabel(lastContactDate: string | null) {
   return `${Math.floor(elapsedDays / 30)}mo ago`;
 }
 
+function parseContactTypeFromUrl(raw: string | null): string {
+  const t = (raw ?? "").trim();
+  return (WORKSPACE_CONTACT_TYPES as readonly string[]).includes(t) ? t : "";
+}
+
 type ApiOk = { rows: WorkspaceContactPageRow[]; total: number };
 type ApiErr = { error?: string; hint?: string };
 
@@ -73,11 +89,14 @@ type ContactsBrowsePanelProps = {
   onAutoOpenCreateHandled?: () => void;
 };
 
-export function ContactsBrowsePanel({
+function ContactsBrowsePanelInner({
   autoOpenCreate = false,
   onAutoOpenCreateHandled,
 }: ContactsBrowsePanelProps = {}) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
   const pageSize = WORKSPACE_CONTACTS_PAGE_SIZE_DEFAULT;
   const [queryInput, setQueryInput] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
@@ -88,10 +107,40 @@ export function ContactsBrowsePanel({
   const [error, setError] = useState<string | null>(null);
   const [reloadTick, setReloadTick] = useState(0);
   const [formOpen, setFormOpen] = useState(false);
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  const [activeOrganisationType, setActiveOrganisationType] = useState("");
-  const [organisationTypeOptions, setOrganisationTypeOptions] = useState<string[]>(
-    [],
+  const [typeFiltersOpen, setTypeFiltersOpen] = useState(false);
+  const [industryFiltersOpen, setIndustryFiltersOpen] = useState(false);
+  const [activeContactType, setActiveContactType] = useState("");
+  const [activeSectors, setActiveSectors] = useState<Set<WorkspaceSectorSlug>>(
+    () => new Set(),
+  );
+
+  useLayoutEffect(() => {
+    setActiveContactType(parseContactTypeFromUrl(searchParams.get("contactType")));
+    setActiveSectors(new Set(parseSectorsQuery(searchParams.get("sectors"))));
+  }, [searchParams]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(
+      typeof window !== "undefined" ? window.location.search.slice(1) : "",
+    );
+    params.set("nav", "contacts");
+    if (activeContactType) params.set("contactType", activeContactType);
+    else params.delete("contactType");
+    const sq = formatSectorsQuery(activeSectors);
+    if (sq) params.set("sectors", sq);
+    else params.delete("sectors");
+    const nextQs = params.toString();
+    const curQs =
+      typeof window !== "undefined" ? window.location.search.slice(1) : "";
+    if (nextQs !== curQs) {
+      const href = nextQs.length > 0 ? `${pathname}?${nextQs}` : pathname;
+      router.replace(href, { scroll: false });
+    }
+  }, [activeContactType, activeSectors, pathname, router]);
+
+  const sectorsKey = useMemo(
+    () => formatSectorsQuery(activeSectors),
+    [activeSectors],
   );
 
   useEffect(() => {
@@ -101,7 +150,7 @@ export function ContactsBrowsePanel({
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedQuery, activeOrganisationType]);
+  }, [debouncedQuery, activeContactType, sectorsKey]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -113,8 +162,11 @@ export function ContactsBrowsePanel({
     if (debouncedQuery !== "") {
       params.set("q", debouncedQuery);
     }
-    if (activeOrganisationType !== "") {
-      params.set("organisationType", activeOrganisationType);
+    if (activeContactType !== "") {
+      params.set("contactType", activeContactType);
+    }
+    if (sectorsKey !== "") {
+      params.set("sectors", sectorsKey);
     }
     try {
       const res = await fetch(`/api/workspace/contacts?${params.toString()}`);
@@ -137,42 +189,32 @@ export function ContactsBrowsePanel({
     } finally {
       setLoading(false);
     }
-  }, [page, debouncedQuery, pageSize, activeOrganisationType]);
+  }, [page, debouncedQuery, pageSize, activeContactType, sectorsKey]);
 
   useEffect(() => {
     void load();
   }, [load, reloadTick]);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch(
-          `/api/workspace/organisations?page=1&pageSize=${WORKSPACE_ORGANISATIONS_PAGE_SIZE_MAX}`,
-        );
-        const data = (await res.json()) as { rows?: WorkspaceOrganisationPageRow[] };
-        if (!res.ok || cancelled) return;
-        const values = Array.from(
-          new Set(
-            (data.rows ?? [])
-              .map((x) => x.type?.trim() ?? "")
-              .filter((x) => x.length > 0),
-          ),
-        ).sort((a, b) => a.localeCompare(b));
-        setOrganisationTypeOptions(values);
-      } catch {
-        if (!cancelled) setOrganisationTypeOptions([]);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const safePage = Math.min(page, totalPages);
   const from = total === 0 ? 0 : (safePage - 1) * pageSize + 1;
   const to = Math.min(safePage * pageSize, total);
+
+  const hasFilters = activeContactType !== "" || activeSectors.size > 0;
+
+  const filterSummary = useMemo(() => {
+    const bits: string[] = [];
+    if (activeContactType) bits.push(activeContactType);
+    if (activeSectors.size > 0) {
+      if (activeSectors.size === 1) {
+        const only = [...activeSectors][0];
+        bits.push(WORKSPACE_SECTOR_LABEL[only]);
+      } else {
+        bits.push(`${activeSectors.size} industries`);
+      }
+    }
+    return bits.length > 0 ? ` · ${bits.join(" · ")}` : "";
+  }, [activeContactType, activeSectors]);
 
   useEffect(() => {
     if (page !== safePage && safePage >= 1) {
@@ -191,6 +233,15 @@ export function ContactsBrowsePanel({
     }
   }, [autoOpenCreate, openCreate, onAutoOpenCreateHandled]);
 
+  const toggleSector = (slug: WorkspaceSectorSlug) => {
+    setActiveSectors((prev) => {
+      const next = new Set(prev);
+      if (next.has(slug)) next.delete(slug);
+      else next.add(slug);
+      return next;
+    });
+  };
+
   return (
     <div className="flex flex-col px-4 py-6 sm:px-8">
       <div className="shrink-0">
@@ -206,7 +257,7 @@ export function ContactsBrowsePanel({
                   ? debouncedQuery
                     ? "No matches for that search."
                     : "No contacts yet."
-                  : `Showing ${from}–${to} of ${total}`}
+                  : `Showing ${from}–${to} of ${total}${hasFilters ? ` matching${filterSummary}` : ""}`}
             </p>
           </div>
           <button
@@ -232,41 +283,57 @@ export function ContactsBrowsePanel({
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={() => setFiltersOpen((v) => !v)}
+            onClick={() => setTypeFiltersOpen((v) => !v)}
             className="rounded-lg border border-charcoal/15 bg-cream px-3 py-1.5 text-xs font-medium text-charcoal transition-colors hover:bg-cream-light"
           >
-            {filtersOpen ? "Hide filters" : "Filter by type"}
+            {typeFiltersOpen ? "Hide type filter" : "Filter by type"}
           </button>
-          {activeOrganisationType ? (
+          <button
+            type="button"
+            onClick={() => setIndustryFiltersOpen((v) => !v)}
+            className="rounded-lg border border-charcoal/15 bg-cream px-3 py-1.5 text-xs font-medium text-charcoal transition-colors hover:bg-cream-light"
+          >
+            {industryFiltersOpen ? "Hide industry filter" : "Filter by industry"}
+          </button>
+          {activeContactType ? (
             <button
               type="button"
-              onClick={() => setActiveOrganisationType("")}
+              onClick={() => setActiveContactType("")}
               className="rounded-lg border border-charcoal/15 bg-cream-light px-3 py-1.5 text-xs text-charcoal-light"
             >
-              Clear: {activeOrganisationType}
+              Clear type: {activeContactType}
+            </button>
+          ) : null}
+          {activeSectors.size > 0 ? (
+            <button
+              type="button"
+              onClick={() => setActiveSectors(new Set())}
+              className="rounded-lg border border-charcoal/15 bg-cream-light px-3 py-1.5 text-xs text-charcoal-light"
+            >
+              Clear industries — {activeSectors.size} selected
             </button>
           ) : null}
         </div>
-        {filtersOpen ? (
-          <div className="mt-3 flex flex-wrap gap-2">
+        {typeFiltersOpen ? (
+          <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Contact type">
             <button
               type="button"
-              onClick={() => setActiveOrganisationType("")}
+              onClick={() => setActiveContactType("")}
               className={`rounded-full border px-3 py-1 text-xs transition-colors ${
-                activeOrganisationType === ""
+                activeContactType === ""
                   ? "border-charcoal bg-charcoal text-cream"
                   : "border-charcoal/15 bg-cream text-charcoal-light hover:bg-cream-light"
               }`}
             >
-              All
+              All types
             </button>
-            {organisationTypeOptions.map((type) => (
+            {WORKSPACE_CONTACT_TYPES.map((type) => (
               <button
                 key={type}
                 type="button"
-                onClick={() => setActiveOrganisationType(type)}
+                onClick={() => setActiveContactType(type)}
                 className={`rounded-full border px-3 py-1 text-xs transition-colors ${
-                  activeOrganisationType === type
+                  activeContactType === type
                     ? "border-charcoal bg-charcoal text-cream"
                     : "border-charcoal/15 bg-cream text-charcoal-light hover:bg-cream-light"
                 }`}
@@ -274,6 +341,42 @@ export function ContactsBrowsePanel({
                 {type}
               </button>
             ))}
+          </div>
+        ) : null}
+        {industryFiltersOpen ? (
+          <div
+            className="mt-3 flex flex-wrap gap-2"
+            role="group"
+            aria-label="Industry sectors"
+          >
+            <button
+              type="button"
+              onClick={() => setActiveSectors(new Set())}
+              className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                activeSectors.size === 0
+                  ? "border-charcoal bg-charcoal text-cream"
+                  : "border-charcoal/15 bg-cream text-charcoal-light hover:bg-cream-light"
+              }`}
+            >
+              All industries
+            </button>
+            {WORKSPACE_SECTOR_SLUGS.map((slug) => {
+              const on = activeSectors.has(slug);
+              return (
+                <button
+                  key={slug}
+                  type="button"
+                  onClick={() => toggleSector(slug)}
+                  className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                    on
+                      ? "border-charcoal bg-charcoal text-cream"
+                      : "border-charcoal/15 bg-cream text-charcoal-light hover:bg-cream-light"
+                  }`}
+                >
+                  {WORKSPACE_SECTOR_LABEL[slug]}
+                </button>
+              );
+            })}
           </div>
         ) : null}
       </div>
@@ -395,5 +498,19 @@ export function ContactsBrowsePanel({
         onAfterCreate={() => setPage(1)}
       />
     </div>
+  );
+}
+
+export function ContactsBrowsePanel(props: ContactsBrowsePanelProps = {}) {
+  return (
+    <Suspense
+      fallback={
+        <div className="px-4 py-6 sm:px-8">
+          <p className="text-sm text-charcoal-light">Loading contacts…</p>
+        </div>
+      }
+    >
+      <ContactsBrowsePanelInner {...props} />
+    </Suspense>
   );
 }

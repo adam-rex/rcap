@@ -110,18 +110,22 @@ function formatDateTime(iso: string): string {
   });
 }
 
-/** Single compact label : value for the header strip */
+/** Label : value; always rendered — use emptyLabel when value is blank. */
 function MetaItem({
   label,
   value,
   href,
+  emptyLabel = "—",
 }: {
   label: string;
   value: string | null | undefined;
   href?: string;
+  emptyLabel?: string;
 }) {
-  const display = value && value.trim().length > 0 ? value : null;
-  if (display == null && !href) return null;
+  const hasValue = value != null && String(value).trim().length > 0;
+  const display = hasValue ? String(value).trim() : null;
+  const text = display ?? emptyLabel;
+  const isPlaceholder = display == null;
   return (
     <div className="flex min-w-0 flex-col gap-0.5">
       <span className="text-[10px] font-semibold uppercase tracking-wide text-charcoal-light/75">
@@ -135,8 +139,12 @@ function MetaItem({
           {display}
         </a>
       ) : (
-        <span className="truncate text-xs text-charcoal">
-          {display ?? "—"}
+        <span
+          className={`truncate text-xs ${
+            isPlaceholder ? "text-charcoal-light/65" : "text-charcoal"
+          }`}
+        >
+          {text}
         </span>
       )}
     </div>
@@ -515,9 +523,14 @@ export function ContactDetailView({
     }
   };
 
-  const subline = [contact.role, contact.organisation_name, contact.geography]
+  const subline = [contact.role, contact.organisation_name]
     .filter((x): x is string => typeof x === "string" && x.length > 0)
     .join(" · ");
+
+  const typeBadge =
+    contact.contact_type?.trim().length > 0
+      ? contact.contact_type.trim()
+      : "Not set";
 
   const shellClass = isPage
     ? "min-h-dvh w-full bg-cream pb-10 pt-[env(safe-area-inset-top,0px)]"
@@ -593,45 +606,47 @@ export function ContactDetailView({
               {initials(contact.name)}
             </div>
             <div className="min-w-0 flex-1">
-              <h2 className="font-serif text-lg font-normal tracking-tight text-charcoal sm:text-xl">
-                {contact.name}
-              </h2>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="font-serif text-lg font-normal tracking-tight text-charcoal sm:text-xl">
+                  {contact.name}
+                </h2>
+                <span
+                  className="inline-flex items-center gap-1 rounded-md border border-charcoal/12 bg-cream px-2 py-0.5 text-[11px] font-medium text-charcoal shadow-[0_1px_0_rgba(10,10,10,0.04)]"
+                  title="Contact type"
+                >
+                  <Tag className="size-3 shrink-0 text-charcoal/65" aria-hidden />
+                  {typeBadge}
+                </span>
+              </div>
               {subline ? (
                 <p className="mt-0.5 line-clamp-2 text-xs text-charcoal-light/90">
                   {subline}
                 </p>
-              ) : null}
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {contact.contact_type ? (
-                  <span className="inline-flex items-center gap-1 rounded-md border border-charcoal/10 bg-cream px-2 py-0.5 text-[11px] text-charcoal">
-                    <Tag className="size-3 opacity-60" aria-hidden />
-                    {contact.contact_type}
-                  </span>
-                ) : null}
-                {contact.sector ? (
-                  <span className="rounded-md border border-charcoal/10 bg-cream px-2 py-0.5 text-[11px] text-charcoal-light">
-                    {contact.sector}
-                  </span>
-                ) : null}
-                {contact.organisation_type ? (
-                  <span className="rounded-md border border-charcoal/10 bg-cream px-2 py-0.5 text-[11px] text-charcoal-light">
-                    {contact.organisation_type}
-                  </span>
-                ) : null}
-              </div>
+              ) : (
+                <p className="mt-0.5 text-xs text-charcoal-light/65">—</p>
+              )}
             </div>
           </div>
 
-          <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-charcoal/[0.06] pt-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+          <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-charcoal/[0.06] pt-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
             <MetaItem
               label="Organisation"
               value={contact.organisation_name}
             />
             <MetaItem label="Role" value={contact.role} />
+            <MetaItem label="Sector" value={contact.sector} />
             <MetaItem label="Geography" value={contact.geography} />
             <MetaItem
+              label="Org type"
+              value={contact.organisation_type}
+            />
+            <MetaItem
               label="Last contact"
-              value={formatDate(contact.last_contact_date)}
+              value={
+                contact.last_contact_date
+                  ? formatDate(contact.last_contact_date)
+                  : null
+              }
             />
             <MetaItem
               label="Rex team"
@@ -675,6 +690,18 @@ export function ContactDetailView({
                 Long-form context for this relationship — saved separately from
                 quick comments below.
               </p>
+              <div className="mt-3 rounded-lg border border-charcoal/[0.08] bg-cream-light/40 px-3 py-2.5">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-charcoal-light/75">
+                  On file
+                </p>
+                <p className="mt-1 min-h-[3rem] whitespace-pre-wrap text-sm leading-relaxed text-charcoal">
+                  {loading
+                    ? "…"
+                    : detail?.notes?.trim()
+                      ? detail.notes
+                      : "Not set"}
+                </p>
+              </div>
               <textarea
                 value={notesDraft}
                 onChange={(e) => {
