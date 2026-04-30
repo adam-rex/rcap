@@ -624,7 +624,7 @@ export function ContactUpsertDialog({
       title={isEdit ? "Edit contact details" : "New contact"}
       onClose={closeForm}
       variant={isEdit ? "modal" : "fullscreen"}
-      modalMaxWidthClass={isEdit ? "max-w-2xl" : "max-w-md"}
+      modalMaxWidthClass={isEdit ? "sm:max-w-2xl" : "sm:max-w-md"}
     >
       {formNode}
     </WorkspaceCreateDialog>

@@ -27,7 +27,7 @@ type WorkspaceCreateDialogProps = {
   children: ReactNode;
   /** Full-viewport sheet (e.g. contact create/edit). Default: centered modal. */
   variant?: "modal" | "fullscreen";
-  /** Max width for modal variant (Tailwind classes). */
+  /** Max width from `sm` upward only (e.g. `sm:max-w-md`). Mobile stays full width. */
   modalMaxWidthClass?: string;
   /**
    * On small viewports, give the sheet a fixed viewport height (up to max-h) so the
@@ -43,7 +43,7 @@ export function WorkspaceCreateDialog({
   onClose,
   children,
   variant = "modal",
-  modalMaxWidthClass = "max-w-md",
+  modalMaxWidthClass = "sm:max-w-md",
   fillMobileViewport = false,
 }: WorkspaceCreateDialogProps) {
   // Mount-detect so we only call createPortal client-side (avoids SSR mismatch).
@@ -62,12 +62,26 @@ export function WorkspaceCreateDialog({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
+  useEffect(() => {
+    if (!open) return;
+    const html = document.documentElement;
+    const body = document.body;
+    const prevHtml = html.style.overflow;
+    const prevBody = body.style.overflow;
+    html.style.overflow = "hidden";
+    body.style.overflow = "hidden";
+    return () => {
+      html.style.overflow = prevHtml;
+      body.style.overflow = prevBody;
+    };
+  }, [open]);
+
   if (!open || !mounted) return null;
 
   const fullscreen = variant === "fullscreen";
 
   const modalShellMobileFill = fillMobileViewport
-    ? "max-sm:h-[min(90dvh,calc(100dvh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)))]"
+    ? "max-sm:h-[min(90svh,calc(100svh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)))]"
     : "";
 
   // Portaling to document.body decouples the overlay from any draggable/clickable
@@ -77,8 +91,8 @@ export function WorkspaceCreateDialog({
     <div
       className={
         fullscreen
-          ? "fixed inset-0 z-50 flex items-stretch justify-stretch p-0 pt-[env(safe-area-inset-top,0px)]"
-          : "fixed inset-0 z-50 flex items-end justify-center p-0 pt-[env(safe-area-inset-top,0px)] sm:items-center sm:p-4"
+          ? "fixed inset-0 z-50 flex max-w-full items-stretch justify-stretch overflow-x-hidden p-0 pt-[env(safe-area-inset-top,0px)]"
+          : "fixed inset-0 z-50 flex max-w-full items-end justify-center overflow-x-hidden p-0 pt-[env(safe-area-inset-top,0px)] sm:items-center sm:p-4"
       }
       draggable={false}
       onMouseDown={(e) => e.stopPropagation()}
@@ -99,8 +113,8 @@ export function WorkspaceCreateDialog({
         aria-labelledby="workspace-create-title"
         className={
           fullscreen
-            ? "relative z-10 flex h-[min(100dvh,calc(100dvh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)))] w-full max-w-none min-h-0 flex-col overflow-hidden border-0 border-charcoal/15 bg-cream shadow-none"
-            : `relative z-10 mt-auto flex min-h-0 max-h-[min(90dvh,calc(100dvh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)))] w-full ${modalMaxWidthClass} flex-col overflow-hidden rounded-t-xl border border-charcoal/15 bg-cream shadow-xl ${modalShellMobileFill} sm:mt-0 sm:h-auto sm:max-h-[90dvh] sm:rounded-xl`
+            ? "relative z-10 flex h-[min(100svh,calc(100svh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)))] w-full max-w-full min-h-0 touch-manipulation flex-col overflow-hidden border-0 border-charcoal/15 bg-cream shadow-none sm:max-w-none"
+            : `relative z-10 mt-auto flex min-h-0 max-h-[min(90svh,calc(100svh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)))] w-full max-w-full touch-manipulation flex-col overflow-hidden rounded-t-xl border border-charcoal/15 bg-cream shadow-xl ${modalShellMobileFill} ${modalMaxWidthClass} sm:mt-0 sm:h-auto sm:max-h-[90dvh] sm:rounded-xl`
         }
       >
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-charcoal/10 px-4 py-3">
@@ -119,14 +133,16 @@ export function WorkspaceCreateDialog({
             ×
           </button>
         </div>
-        <div
-          className={
-            fullscreen
-              ? "min-h-0 flex-1 overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch] touch-pan-y pb-[env(safe-area-inset-bottom,0px)]"
-              : "min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch] touch-pan-y pb-[env(safe-area-inset-bottom,0px)]"
-          }
-        >
-          {children}
+        <div className="relative min-h-0 flex-1">
+          <div
+            className={
+              fullscreen
+                ? "absolute inset-0 overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch] pb-[env(safe-area-inset-bottom,0px)]"
+                : "absolute inset-0 overflow-x-hidden overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch] pb-[env(safe-area-inset-bottom,0px)]"
+            }
+          >
+            {children}
+          </div>
         </div>
       </div>
     </div>,
