@@ -123,12 +123,18 @@ export function WorkspaceCreateDialog({
           </button>
         </div>
         {useInsetScroller ? (
-          <div className="relative min-h-0 flex-1">
+          <div
+            className={
+              fullscreen
+                ? "relative min-h-0 flex-1"
+                : "relative min-h-0 flex-1 sm:flex-none"
+            }
+          >
             <div
               className={
                 fullscreen
                   ? "absolute inset-0 overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch] pb-[env(safe-area-inset-bottom,0px)]"
-                  : "absolute inset-0 overflow-x-hidden overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch] pb-[env(safe-area-inset-bottom,0px)]"
+                  : "max-sm:absolute max-sm:inset-0 max-sm:overflow-x-hidden max-sm:overflow-y-auto sm:static sm:overflow-x-hidden sm:overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch] pb-[env(safe-area-inset-bottom,0px)]"
               }
             >
               {children}
