@@ -53,6 +53,7 @@ export function ChatShell({
   const [pendingContactsAutoCreate, setPendingContactsAutoCreate] =
     useState(false);
   const [quickCaptureOpen, setQuickCaptureOpen] = useState(false);
+  const [contactsReloadNonce, setContactsReloadNonce] = useState(0);
   const [pendingEmailDetailId, setPendingEmailDetailId] = useState<string | null>(
     null,
   );
@@ -87,6 +88,7 @@ export function ChatShell({
 
   const onCaptured = useCallback(() => {
     router.refresh();
+    setContactsReloadNonce((n) => n + 1);
   }, [router]);
 
   const onOpenSuggestionsFromCapture = useCallback(() => {
@@ -268,6 +270,7 @@ export function ChatShell({
             <ContactsBrowsePanel
               autoOpenCreate={pendingContactsAutoCreate}
               onAutoOpenCreateHandled={onContactsAutoCreateHandled}
+              reloadNonce={contactsReloadNonce}
             />
           ) : activeNav === "emails" ? (
             <EmailsBrowsePanel

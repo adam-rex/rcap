@@ -62,23 +62,12 @@ export function WorkspaceCreateDialog({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
-  useEffect(() => {
-    if (!open) return;
-    const html = document.documentElement;
-    const body = document.body;
-    const prevHtml = html.style.overflow;
-    const prevBody = body.style.overflow;
-    html.style.overflow = "hidden";
-    body.style.overflow = "hidden";
-    return () => {
-      html.style.overflow = prevHtml;
-      body.style.overflow = prevBody;
-    };
-  }, [open]);
-
   if (!open || !mounted) return null;
 
   const fullscreen = variant === "fullscreen";
+
+  // Inset scroller only when sheet height is definite; otherwise flex collapses to 0 with absolute-only children.
+  const useInsetScroller = fullscreen || fillMobileViewport;
 
   const modalShellMobileFill = fillMobileViewport
     ? "max-sm:h-[min(90svh,calc(100svh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)))]"
@@ -133,17 +122,29 @@ export function WorkspaceCreateDialog({
             ×
           </button>
         </div>
-        <div className="relative min-h-0 flex-1">
+        {useInsetScroller ? (
+          <div className="relative min-h-0 flex-1">
+            <div
+              className={
+                fullscreen
+                  ? "absolute inset-0 overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch] pb-[env(safe-area-inset-bottom,0px)]"
+                  : "absolute inset-0 overflow-x-hidden overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch] pb-[env(safe-area-inset-bottom,0px)]"
+              }
+            >
+              {children}
+            </div>
+          </div>
+        ) : (
           <div
             className={
               fullscreen
-                ? "absolute inset-0 overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch] pb-[env(safe-area-inset-bottom,0px)]"
-                : "absolute inset-0 overflow-x-hidden overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch] pb-[env(safe-area-inset-bottom,0px)]"
+                ? "min-h-0 flex-1 overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch] pb-[env(safe-area-inset-bottom,0px)]"
+                : "min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch] pb-[env(safe-area-inset-bottom,0px)]"
             }
           >
             {children}
           </div>
-        </div>
+        )}
       </div>
     </div>,
     document.body,

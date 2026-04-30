@@ -87,11 +87,14 @@ type ApiErr = { error?: string; hint?: string };
 type ContactsBrowsePanelProps = {
   autoOpenCreate?: boolean;
   onAutoOpenCreateHandled?: () => void;
+  /** Bumped from parent after Quick Capture (etc.) so client fetch reruns — `router.refresh()` alone does not reload this panel. */
+  reloadNonce?: number;
 };
 
 function ContactsBrowsePanelInner({
   autoOpenCreate = false,
   onAutoOpenCreateHandled,
+  reloadNonce = 0,
 }: ContactsBrowsePanelProps = {}) {
   const router = useRouter();
   const pathname = usePathname();
@@ -193,7 +196,7 @@ function ContactsBrowsePanelInner({
 
   useEffect(() => {
     void load();
-  }, [load, reloadTick]);
+  }, [load, reloadTick, reloadNonce]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const safePage = Math.min(page, totalPages);
