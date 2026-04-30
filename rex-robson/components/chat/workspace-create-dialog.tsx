@@ -134,7 +134,7 @@ export function WorkspaceCreateDialog({
               className={
                 fullscreen
                   ? "absolute inset-0 overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch] pb-[env(safe-area-inset-bottom,0px)]"
-                  : "max-sm:absolute max-sm:inset-0 max-sm:overflow-x-hidden max-sm:overflow-y-auto sm:static sm:min-h-0 sm:max-h-[calc(90dvh-3.75rem)] sm:overflow-x-hidden sm:overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch] pb-[env(safe-area-inset-bottom,0px)]"
+                  : "max-sm:absolute max-sm:inset-0 max-sm:overflow-x-hidden max-sm:overflow-y-auto sm:static sm:min-h-0 sm:max-h-[calc(90dvh_-_3.75rem)] sm:overflow-x-hidden sm:overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch] pb-[env(safe-area-inset-bottom,0px)]"
               }
             >
               {children}
