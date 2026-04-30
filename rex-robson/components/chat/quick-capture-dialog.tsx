@@ -773,7 +773,12 @@ export function QuickCaptureDialog({
           : "Quick Capture";
 
   return (
-    <WorkspaceCreateDialog open={open} title={headerTitle} onClose={onClose}>
+    <WorkspaceCreateDialog
+      open={open}
+      title={headerTitle}
+      onClose={onClose}
+      fillMobileViewport={phase === "review" || phase === "saving"}
+    >
       {phase === "compose" ? (
         <div className="p-4 sm:p-5">
           <p className="mb-4 text-sm text-charcoal-light">

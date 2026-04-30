@@ -29,6 +29,12 @@ type WorkspaceCreateDialogProps = {
   variant?: "modal" | "fullscreen";
   /** Max width for modal variant (Tailwind classes). */
   modalMaxWidthClass?: string;
+  /**
+   * On small viewports, give the sheet a fixed viewport height (up to max-h) so the
+   * inner scroll region gets a definite flex budget — fixes iOS Safari where tall
+   * bottom sheets otherwise fail to scroll (`overflow-y-auto` inside fixed flex).
+   */
+  fillMobileViewport?: boolean;
 };
 
 export function WorkspaceCreateDialog({
@@ -38,6 +44,7 @@ export function WorkspaceCreateDialog({
   children,
   variant = "modal",
   modalMaxWidthClass = "max-w-md",
+  fillMobileViewport = false,
 }: WorkspaceCreateDialogProps) {
   // Mount-detect so we only call createPortal client-side (avoids SSR mismatch).
   const [mounted, setMounted] = useState(false);
@@ -58,6 +65,10 @@ export function WorkspaceCreateDialog({
   if (!open || !mounted) return null;
 
   const fullscreen = variant === "fullscreen";
+
+  const modalShellMobileFill = fillMobileViewport
+    ? "max-sm:h-[min(90dvh,calc(100dvh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)))]"
+    : "";
 
   // Portaling to document.body decouples the overlay from any draggable/clickable
   // ancestor in the React tree (e.g. match-canvas cards), so dragstart on a button
@@ -88,8 +99,8 @@ export function WorkspaceCreateDialog({
         aria-labelledby="workspace-create-title"
         className={
           fullscreen
-            ? "relative flex h-[min(100dvh,calc(100dvh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)))] w-full max-w-none flex-col overflow-hidden border-0 border-charcoal/15 bg-cream shadow-none"
-            : `relative mt-auto max-h-[min(90dvh,calc(100dvh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px))] w-full ${modalMaxWidthClass} overflow-y-auto rounded-t-xl border border-charcoal/15 bg-cream pb-[env(safe-area-inset-bottom,0px)] shadow-xl sm:mt-0 sm:max-h-[90dvh] sm:rounded-xl`
+            ? "relative z-10 flex h-[min(100dvh,calc(100dvh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)))] w-full max-w-none min-h-0 flex-col overflow-hidden border-0 border-charcoal/15 bg-cream shadow-none"
+            : `relative z-10 mt-auto flex min-h-0 max-h-[min(90dvh,calc(100dvh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)))] w-full ${modalMaxWidthClass} flex-col overflow-hidden rounded-t-xl border border-charcoal/15 bg-cream shadow-xl ${modalShellMobileFill} sm:mt-0 sm:h-auto sm:max-h-[90dvh] sm:rounded-xl`
         }
       >
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-charcoal/10 px-4 py-3">
@@ -108,13 +119,15 @@ export function WorkspaceCreateDialog({
             ×
           </button>
         </div>
-        {fullscreen ? (
-          <div className="min-h-0 flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom,0px)]">
-            {children}
-          </div>
-        ) : (
-          children
-        )}
+        <div
+          className={
+            fullscreen
+              ? "min-h-0 flex-1 overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch] touch-pan-y pb-[env(safe-area-inset-bottom,0px)]"
+              : "min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch] touch-pan-y pb-[env(safe-area-inset-bottom,0px)]"
+          }
+        >
+          {children}
+        </div>
       </div>
     </div>,
     document.body,

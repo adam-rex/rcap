@@ -8,7 +8,10 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { MatchKind } from "@/lib/data/workspace-matches-page.types";
 import type { WorkspaceOpportunityRow } from "@/lib/data/workspace-opportunities-page";
-import type { WorkspaceContactPageRow } from "@/lib/data/workspace-contacts.types";
+import {
+  WORKSPACE_CONTACTS_PAGE_SIZE_MAX,
+  type WorkspaceContactPageRow,
+} from "@/lib/data/workspace-contacts.types";
 import { ContactPairGeographyLine } from "./contact-pair-geography";
 import { createWhyFitMarkdownComponents } from "./match-context-markdown";
 import {
@@ -117,6 +120,9 @@ export function OpportunitiesPanel() {
   const [newOppOpen, setNewOppOpen] = useState(false);
   const [contactOptions, setContactOptions] = useState<ContactOption[]>([]);
   const [contactsLoading, setContactsLoading] = useState(false);
+  const [contactsPickerError, setContactsPickerError] = useState<string | null>(
+    null,
+  );
   const [noContactA, setNoContactA] = useState("");
   const [noContactB, setNoContactB] = useState("");
   const [noKind, setNoKind] = useState<MatchKind>("founder_investor");
@@ -234,20 +240,34 @@ export function OpportunitiesPanel() {
   const ensureContacts = useCallback(async () => {
     if (contactOptions.length > 0 || contactsLoading) return;
     setContactsLoading(true);
+    setContactsPickerError(null);
     try {
-      const res = await fetch("/api/workspace/contacts?page=1&pageSize=80");
-      const data = (await res.json()) as { rows?: WorkspaceContactPageRow[] };
-      if (res.ok && Array.isArray(data.rows)) {
+      const res = await fetch(
+        `/api/workspace/contacts?page=1&pageSize=${WORKSPACE_CONTACTS_PAGE_SIZE_MAX}`,
+      );
+      const data = (await res.json()) as {
+        rows?: WorkspaceContactPageRow[];
+        error?: string;
+      };
+      if (!res.ok) {
+        setContactsPickerError(
+          data.error ?? "Could not load contacts for this form.",
+        );
+        return;
+      }
+      if (Array.isArray(data.rows)) {
         setContactOptions(
-          data.rows.map((r) => ({
-            id: r.id,
-            name: r.name,
-            contact_type: r.contact_type,
-          })),
+          data.rows
+            .filter((r) => typeof r.id === "string" && r.id.length > 0)
+            .map((r) => ({
+              id: r.id,
+              name: r.name?.trim() ? r.name : "Unnamed contact",
+              contact_type: r.contact_type,
+            })),
         );
       }
     } catch {
-      /* ignore */
+      setContactsPickerError("Network error while loading contacts.");
     } finally {
       setContactsLoading(false);
     }
@@ -259,6 +279,7 @@ export function OpportunitiesPanel() {
     setNoKind("founder_investor");
     setNoContext("");
     setNoError(null);
+    setContactsPickerError(null);
     setNewOppOpen(true);
     void ensureContacts();
   };
@@ -902,7 +923,7 @@ export function OpportunitiesPanel() {
         }}
       >
         <form className="space-y-3 p-4" onSubmit={onCreateOpportunity}>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <div>
               <label className={WORKSPACE_FORM_LABEL_CLASS} htmlFor="no-a">
                 Contact A
@@ -946,6 +967,11 @@ export function OpportunitiesPanel() {
           </div>
           {contactsLoading ? (
             <p className="text-[11px] text-charcoal-light/70">Loading contacts…</p>
+          ) : null}
+          {contactsPickerError ? (
+            <p className="text-sm text-red-700/90" role="alert">
+              {contactsPickerError}
+            </p>
           ) : null}
           <div>
             <label className={WORKSPACE_FORM_LABEL_CLASS} htmlFor="no-kind">
