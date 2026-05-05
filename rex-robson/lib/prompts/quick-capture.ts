@@ -8,12 +8,29 @@ Rules:
 - Never invent a name, email, phone, or company. If the field is not in the input, leave it blank ("").
 - Prefer short, factual values. Titles in \`role\` (e.g. "Partner", "Head of Credit"). Single sector (e.g. "Fintech", "Real Estate"). Geography as city, region, or country as written.
 - \`contactType\` must be exactly one of: "Founder", "Investor", "Lender", "Advisor", "Corporate", "Other". Guidance:
-  - "Founder" — starts / runs their own company (founder, co-founder, CEO/owner of their own business).
-  - "Investor" — deploys equity (VC, PE, family office, angel, LP, GP, etc.).
-  - "Lender" — deploys debt/credit (bank, private credit fund, debt provider).
-  - "Advisor" — professional whose clients are founders/investors and can be a source of warm intros (lawyer, accountant, tax advisor, wealth manager, interior designer, consultant). Not an investor themselves.
-  - "Corporate" — senior professional at a very large blue-chip corporation (e.g. MD at a Big Four firm, exec at a FTSE/Fortune 500). Not a founder, not part of a small/mid investment group, not a lender.
-  - "Other" — none of the above, or genuinely unclear.
+  - "Founder" — currently builds/runs an operating company. Position is "Founder", "Co-founder", or "Founding [executive role]" (CEO/CTO/COO/CFO/President), OR is C-suite at a clear startup. NOT "Founding Engineer", "Founding Designer", or other early-employee titles (those are Corporate). NOT "Founding Partner" at a law/accounting/consulting firm (that's about firm-founding, not company-founding).
+  - "Investor" — personally deploys equity capital into companies. VC partners/principals/associates, angels, family office principals, fund managers, LPs with discretion, growth equity, PE investment professionals. Must have decision authority over capital deployment.
+  - "Lender" — personally provides debt/credit. Venture debt, private credit, asset finance specialists, lending desk professionals. NOT M&A bankers — those are Corporate.
+  - "Advisor" — independent or small-boutique professional. Solo consultants, M&A boutiques, independent wealth advisors, small specialist firms (typically <20 people, often eponymous like "Smith & Co"). The defining feature is they founded or co-own the firm, not that they work at one.
+  - "Corporate" — anyone employed at an established/large firm, regardless of whether the firm provides services or products. This includes:
+    - Big Four accountants (Deloitte, PwC, EY, KPMG, BDO, Grant Thornton)
+    - Magic circle and major law firms (Linklaters, Allen & Overy, Clifford Chance, Freshfields, Walkers, Mourant, Ogier, etc.)
+    - Bulge bracket and major investment banks for non-investing roles (Goldman M&A, JPM IBD, Morgan Stanley advisory, Rothschild, Lazard, Houlihan Lokey, Evercore, etc.)
+    - MBB and major consultancies (McKinsey, BCG, Bain, Oliver Wyman)
+    - Multinational corporations (FTSE 100, Fortune 500, etc.)
+    - Anyone in a non-deal-making operational role at any firm (sales, marketing, IR, ops, HR, engineering, product)
+  - "Other" — students, retirees, journalists, government (non-policy), volunteers, anyone clearly not in business/finance.
+
+  KEYWORD TRAPS — override surface keywords:
+  - "Investment Lawyer" / "Investment Funds Lawyer" / "Private Equity Lawyer" → Corporate if at a named law firm; Advisor only if at a small/independent practice.
+  - "Investor Relations" / "Head of IR" / "VP IR" → Corporate (communicates with investors, doesn't deploy capital).
+  - "Investment Banker" / "M&A Banker" / "Coverage Banker" / "IBD" → Corporate (advises on transactions but works at large bank).
+  - "Founding Engineer" / "Founding Designer" / "Founding [non-executive]" → Corporate (early employee, not founder).
+  - "Founding Partner" at a law/accounting/consulting firm → Corporate (firm-founder, not company-founder).
+  - "Partner" disambiguation: VC/PE/family office firm → Investor. Solo or small advisory firm → Advisor. Large law/accounting/consulting firm → Corporate. Operating company → Corporate.
+  - "Managing Director" disambiguation: at a bank → Corporate (banking division). At a fund → Investor. At an operating company → Corporate.
+  - "Director" with no firm context → Other with low confidence (genuinely too ambiguous).
+
   If you cannot tell, choose "Other" and include "contactType" in \`lowConfidence\`.
 - \`notes\` should preserve the user's raw context verbatim-ish (what they said about the person, where they met, what the person is looking for). Keep it short — a few lines at most.
 - \`lowConfidence\` lists any field names you guessed or inferred vs. read literally. Empty array if everything was explicit.

@@ -1,0 +1,36 @@
+Traceback (most recent call last):
+  File "/Users/adamkassir/Desktop/rcap/rex-robson/scripts/reclassify-contacts.py", line 759, in <module>
+    main()
+    ~~~~^^
+  File "/Users/adamkassir/Desktop/rcap/rex-robson/scripts/reclassify-contacts.py", line 650, in main
+    result = classify_contact_once(
+        anthropic_client,
+    ...<3 lines>...
+        logf=logf,
+    )
+  File "/Users/adamkassir/Desktop/rcap/rex-robson/scripts/reclassify-contacts.py", line 343, in classify_contact_once
+    raw1 = call_anthropic(anthropic_client, prompt=prompt, logf=logf)
+  File "/Users/adamkassir/Desktop/rcap/rex-robson/scripts/reclassify-contacts.py", line 313, in call_anthropic
+    msg = anthropic_client.messages.create(
+        model=CLASSIFICATION_MODEL,
+        max_tokens=400,
+        messages=[{"role": "user", "content": prompt}],
+    )
+  File "/Users/adamkassir/Desktop/rcap/rex-robson/.venv/lib/python3.13/site-packages/anthropic/_utils/_utils.py", line 268, in wrapper
+    return func(*args, **kwargs)
+  File "/Users/adamkassir/Desktop/rcap/rex-robson/.venv/lib/python3.13/site-packages/anthropic/resources/messages/messages.py", line 991, in create
+    return self._post(
+           ~~~~~~~~~~^
+        "/v1/messages",
+        ^^^^^^^^^^^^^^^
+    ...<30 lines>...
+        stream_cls=Stream[RawMessageStreamEvent],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/adamkassir/Desktop/rcap/rex-robson/.venv/lib/python3.13/site-packages/anthropic/_base_client.py", line 1368, in post
+    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
+                           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/adamkassir/Desktop/rcap/rex-robson/.venv/lib/python3.13/site-packages/anthropic/_base_client.py", line 1141, in request
+    raise self._make_status_error_from_response(err.response) from None
+anthropic.BadRequestError: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011CabWbpaBp7nrERYGqVkiy'}
