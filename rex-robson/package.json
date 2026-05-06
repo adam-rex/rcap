@@ -6,7 +6,7 @@
     "dev": "kill-port 3000 && next dev -H localhost -p 3000 --webpack",
     "dev:clean": "kill-port 3000 && rm -rf .next && next dev -H localhost -p 3000 --webpack",
     "dev:turbo": "kill-port 3000 && next dev -H localhost -p 3000",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
     "db:seed": "tsx scripts/seed/index.ts",
