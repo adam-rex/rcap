@@ -30,6 +30,7 @@ import {
 type ContactDetail = {
   phone: string | null;
   email: string | null;
+  websiteUrl: string | null;
   notes: string | null;
   organisationId: string | null;
 };
@@ -67,7 +68,10 @@ function formatBytes(n: number | null): string {
 export type ContactDetailViewProps = {
   contact: WorkspaceContactPageRow;
   /** When provided, seeds phone/email/notes before the first fetch completes. */
-  prefetchedFields?: Pick<ContactDetail, "phone" | "email" | "notes"> | null;
+  prefetchedFields?: Pick<
+    ContactDetail,
+    "phone" | "email" | "websiteUrl" | "notes"
+  > | null;
   refreshTick: number;
   /** Full-page layout vs inline panel in Rex shell. */
   layout?: "panel" | "page";
@@ -96,6 +100,13 @@ function formatDate(iso: string | null): string {
     month: "short",
     day: "numeric",
   });
+}
+
+function hrefForWebsite(raw: string | null | undefined): string | undefined {
+  const t = (raw ?? "").trim();
+  if (!t) return undefined;
+  if (/^https?:\/\//i.test(t)) return t;
+  return `https://${t}`;
 }
 
 function formatDateTime(iso: string): string {
@@ -134,6 +145,10 @@ function MetaItem({
       {href && display ? (
         <a
           href={href}
+          target={/^https?:\/\//i.test(href) ? "_blank" : undefined}
+          rel={
+            /^https?:\/\//i.test(href) ? "noopener noreferrer" : undefined
+          }
           className="truncate text-xs text-charcoal underline-offset-2 hover:underline"
         >
           {display}
@@ -167,6 +182,7 @@ export function ContactDetailView({
       ? {
           phone: prefetchedFields.phone,
           email: prefetchedFields.email,
+          websiteUrl: prefetchedFields.websiteUrl ?? null,
           notes: prefetchedFields.notes,
           organisationId: contact.organisation_id,
         }
@@ -384,6 +400,7 @@ export function ContactDetailView({
         const data = (await res.json()) as {
           phone?: string | null;
           email?: string | null;
+          websiteUrl?: string | null;
           notes?: string | null;
           organisationId?: string | null;
           error?: string;
@@ -397,6 +414,7 @@ export function ContactDetailView({
         setDetail({
           phone: data.phone ?? null,
           email: data.email ?? null,
+          websiteUrl: data.websiteUrl ?? null,
           notes: data.notes ?? null,
           organisationId: data.organisationId ?? null,
         });
@@ -451,6 +469,7 @@ export function ContactDetailView({
           geography: contact.geography,
           phone: detail?.phone ?? null,
           email: detail?.email ?? null,
+          websiteUrl: detail?.websiteUrl ?? null,
           notes: notesDraft.trim() === "" ? null : notesDraft.trim(),
           internalOwner:
             contact.internal_owner == null ||
@@ -665,6 +684,15 @@ export function ContactDetailView({
               value={loading ? "…" : detail?.email ?? null}
               href={
                 !loading && detail?.email ? `mailto:${detail.email}` : undefined
+              }
+            />
+            <MetaItem
+              label="Website"
+              value={loading ? "…" : detail?.websiteUrl ?? null}
+              href={
+                !loading && detail?.websiteUrl
+                  ? hrefForWebsite(detail.websiteUrl)
+                  : undefined
               }
             />
           </div>

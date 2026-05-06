@@ -49,6 +49,8 @@ export type ContactUpsertBody = {
   geography: string | null;
   phone: string | null;
   email: string | null;
+  /** Public profile or site URL (https recommended). */
+  websiteUrl: string | null;
   notes: string | null;
   /** Rex team member who added the contact (internal). */
   internalOwner: string | null;
@@ -75,6 +77,8 @@ export function parseContactUpsertBody(
   if (!phone.ok) return phone;
   const email = parseOptionalString(body, "email", 320);
   if (!email.ok) return email;
+  const websiteUrl = parseOptionalString(body, "websiteUrl", 2000);
+  if (!websiteUrl.ok) return websiteUrl;
   const notes = parseOptionalString(body, "notes", 8000);
   if (!notes.ok) return notes;
   const internalOwnerRaw = body["internalOwner"];
@@ -105,6 +109,7 @@ export function parseContactUpsertBody(
       geography: geography.value,
       phone: phone.value,
       email: email.value,
+      websiteUrl: websiteUrl.value,
       notes: notes.value,
       internalOwner,
     },

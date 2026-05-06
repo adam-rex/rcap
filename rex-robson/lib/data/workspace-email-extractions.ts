@@ -191,6 +191,7 @@ export async function applyRexEmailExtraction(
           geography: optStr(p.geography),
           phone: optStr(p.phone),
           email: optStr(p.email),
+          website_url: null,
           notes: optStr(p.notes),
           internal_owner: null,
         });

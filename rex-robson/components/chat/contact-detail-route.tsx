@@ -19,6 +19,7 @@ type ContactApiRow = {
   geography?: string | null;
   phone?: string | null;
   email?: string | null;
+  websiteUrl?: string | null;
   notes?: string | null;
   internalOwner?: string | null;
   lastContactDate?: string | null;
@@ -51,6 +52,7 @@ export function ContactDetailRoute({ contactId }: { contactId: string }) {
   const [prefetchedFields, setPrefetchedFields] = useState<{
     phone: string | null;
     email: string | null;
+    websiteUrl: string | null;
     notes: string | null;
   } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -82,6 +84,7 @@ export function ContactDetailRoute({ contactId }: { contactId: string }) {
       setPrefetchedFields({
         phone: data.phone ?? null,
         email: data.email ?? null,
+        websiteUrl: data.websiteUrl ?? null,
         notes: data.notes ?? null,
       });
     } catch {

@@ -35,6 +35,7 @@ export async function POST(req: Request) {
       geography: fields.value.geography,
       phone: fields.value.phone,
       email: fields.value.email,
+      website_url: fields.value.websiteUrl,
       notes: fields.value.notes,
       internal_owner: fields.value.internalOwner,
     });

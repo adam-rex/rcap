@@ -69,6 +69,7 @@ export function ContactUpsertDialog({
   const [newGeography, setNewGeography] = useState("");
   const [newPhone, setNewPhone] = useState("");
   const [newEmail, setNewEmail] = useState("");
+  const [newWebsiteUrl, setNewWebsiteUrl] = useState("");
   const [newNotes, setNewNotes] = useState("");
   const [newInternalOwner, setNewInternalOwner] = useState<string>(
     INTERNAL_CONTACT_OWNERS[0],
@@ -86,6 +87,7 @@ export function ContactUpsertDialog({
     setNewGeography("");
     setNewPhone("");
     setNewEmail("");
+    setNewWebsiteUrl("");
     setNewNotes("");
     setNewInternalOwner(INTERNAL_CONTACT_OWNERS[0]);
   }, []);
@@ -149,6 +151,7 @@ export function ContactUpsertDialog({
           phone?: string | null;
           email?: string | null;
           notes?: string | null;
+          websiteUrl?: string | null;
           internalOwner?: string | null;
         };
         if (cancelled) return;
@@ -168,6 +171,7 @@ export function ContactUpsertDialog({
         setNewGeography(data.geography ?? "");
         setNewPhone(data.phone ?? "");
         setNewEmail(data.email ?? "");
+        setNewWebsiteUrl(data.websiteUrl ?? "");
         setNewNotes(data.notes ?? "");
         setNewInternalOwner(
           isInternalContactOwner(data.internalOwner)
@@ -275,6 +279,7 @@ export function ContactUpsertDialog({
       geography: newGeography.trim() === "" ? null : newGeography.trim(),
       phone: newPhone.trim() === "" ? null : newPhone.trim(),
       email: newEmail.trim() === "" ? null : newEmail.trim(),
+      websiteUrl: newWebsiteUrl.trim() === "" ? null : newWebsiteUrl.trim(),
       notes: newNotes.trim() === "" ? null : newNotes.trim(),
       internalOwner: newInternalOwner,
     };
@@ -568,6 +573,30 @@ export function ContactUpsertDialog({
               placeholder="name@company.com"
               autoComplete="email"
             />
+          </div>
+          <div>
+            <label
+              htmlFor={`cu-website-${formIdPrefix}`}
+              className={WORKSPACE_FORM_LABEL_CLASS}
+            >
+              Website{" "}
+              <span className="font-normal text-charcoal-light/70">
+                (optional)
+              </span>
+            </label>
+            <input
+              id={`cu-website-${formIdPrefix}`}
+              value={newWebsiteUrl}
+              onChange={(e) => setNewWebsiteUrl(e.target.value)}
+              className={`${WORKSPACE_FORM_INPUT_CLASS} font-mono text-[13px]`}
+              placeholder="https://example.com/profile"
+              autoComplete="url"
+              inputMode="url"
+            />
+            <p className="mt-1 text-[11px] text-charcoal-light/80">
+              LinkedIn, company team page, or personal site — stored on the
+              contact record.
+            </p>
           </div>
           <div>
             <label

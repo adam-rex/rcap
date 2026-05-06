@@ -84,6 +84,7 @@ export async function insertWorkspaceContact(
     geography: string | null;
     phone: string | null;
     email: string | null;
+    website_url: string | null;
     notes: string | null;
     internal_owner: string | null;
   },
@@ -99,6 +100,7 @@ export async function insertWorkspaceContact(
       geography: input.geography,
       phone: input.phone,
       email: input.email,
+      website_url: input.website_url,
       notes: input.notes,
       internal_owner: input.internal_owner,
     })
@@ -165,6 +167,7 @@ export type WorkspaceContactDetail = {
   geography: string | null;
   phone: string | null;
   email: string | null;
+  website_url: string | null;
   notes: string | null;
   internal_owner: string | null;
   last_contact_date: string | null;
@@ -190,6 +193,8 @@ function mapContactDetailFromRow(
     geography: data.geography == null ? null : String(data.geography),
     phone: data.phone == null ? null : String(data.phone),
     email: data.email == null ? null : String(data.email),
+    website_url:
+      data.website_url == null ? null : String(data.website_url),
     notes: data.notes == null ? null : String(data.notes),
     internal_owner:
       data.internal_owner == null ? null : String(data.internal_owner),
@@ -202,7 +207,7 @@ export async function fetchWorkspaceContactById(
   id: string,
 ): Promise<WorkspaceContactDetail | null> {
   const fullSelect =
-    "id,name,contact_type,sector,organisation_id,role,geography,phone,email,notes,internal_owner,last_contact_date";
+    "id,name,contact_type,sector,organisation_id,role,geography,phone,email,website_url,notes,internal_owner,last_contact_date";
   const fallbackSelect =
     "id,name,contact_type,sector,organisation_id,role,geography,phone,email,notes,internal_owner";
 
@@ -350,6 +355,7 @@ export async function updateWorkspaceContact(
     geography: string | null;
     phone: string | null;
     email: string | null;
+    website_url: string | null;
     notes: string | null;
     internal_owner: string | null;
   },
@@ -365,6 +371,7 @@ export async function updateWorkspaceContact(
       geography: input.geography,
       phone: input.phone,
       email: input.email,
+      website_url: input.website_url,
       notes: input.notes,
       internal_owner: input.internal_owner,
     })

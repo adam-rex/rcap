@@ -34,6 +34,7 @@ export async function GET(_req: Request, context: RouteContext) {
       geography: row.geography,
       phone: row.phone,
       email: row.email,
+      websiteUrl: row.website_url ?? null,
       notes: row.notes,
       internalOwner: row.internal_owner,
       lastContactDate: row.last_contact_date,
@@ -73,6 +74,7 @@ export async function PATCH(req: Request, context: RouteContext) {
       geography: fields.value.geography,
       phone: fields.value.phone,
       email: fields.value.email,
+      website_url: fields.value.websiteUrl,
       notes: fields.value.notes,
       internal_owner: fields.value.internalOwner,
     });
