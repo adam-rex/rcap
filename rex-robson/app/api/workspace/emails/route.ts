@@ -12,6 +12,7 @@ export async function GET(req: Request) {
   const pageRaw = url.searchParams.get("page");
   const sizeRaw = url.searchParams.get("pageSize") ?? url.searchParams.get("limit");
   const mailboxRaw = url.searchParams.get("mailbox");
+  const viewRaw = url.searchParams.get("view");
 
   const page = pageRaw ? Number.parseInt(pageRaw, 10) : 1;
   const pageSize = sizeRaw
@@ -46,12 +47,27 @@ export async function GET(req: Request) {
     );
   }
 
+  let emailView: "inbox" | "archived" | undefined;
+  if (mailbox === "emails") {
+    if (viewRaw == null || viewRaw === "" || viewRaw === "inbox") {
+      emailView = "inbox";
+    } else if (viewRaw === "archived") {
+      emailView = "archived";
+    } else {
+      return NextResponse.json(
+        { error: "view must be 'inbox' or 'archived'" },
+        { status: 400 },
+      );
+    }
+  }
+
   try {
     const result = await getWorkspaceEmailsPage({
       search,
       page,
       pageSize,
       mailbox,
+      emailView,
     });
     return NextResponse.json(result);
   } catch (e) {
@@ -63,7 +79,7 @@ export async function GET(req: Request) {
       {
         error: message,
         hint:
-          "Apply migration 20260413170000_rex_inbound_emails.sql if rex_inbound_emails is missing.",
+          "Apply migration 20260413170000_rex_inbound_emails.sql if rex_inbound_emails is missing; add archived_at via 20260506120000_rex_inbound_emails_archived_at.sql.",
       },
       { status: 503 },
     );

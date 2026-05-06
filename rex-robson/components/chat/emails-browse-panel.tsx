@@ -19,6 +19,10 @@ import {
 type ApiListOk = { rows: WorkspaceEmailListRow[]; total: number };
 type ApiErr = { error?: string; hint?: string };
 type MailboxMode = "emails" | "call_logs";
+type EmailViewMode = "inbox" | "archived";
+
+const EMAILS_TAB_BTN =
+  "rounded-full border px-3 py-1 text-xs transition-colors disabled:opacity-40";
 
 type DetailAttachment = {
   id: string;
@@ -93,6 +97,7 @@ export function EmailsBrowsePanel({
   onInitialEmailIdHandled?: () => void;
 }) {
   const pageSize = WORKSPACE_EMAILS_PAGE_SIZE_DEFAULT;
+  const [emailView, setEmailView] = useState<EmailViewMode>("inbox");
   const [queryInput, setQueryInput] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [page, setPage] = useState(1);
@@ -105,6 +110,7 @@ export function EmailsBrowsePanel({
   const [detail, setDetail] = useState<EmailDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
+  const [archiveBusyId, setArchiveBusyId] = useState<string | null>(null);
 
   useEffect(() => {
     const t = window.setTimeout(() => setDebouncedQuery(queryInput.trim()), 320);
@@ -113,7 +119,14 @@ export function EmailsBrowsePanel({
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedQuery]);
+  }, [debouncedQuery, mailbox, emailView]);
+
+  useEffect(() => {
+    if (mailbox !== "emails") return;
+    setSelectedId(null);
+    setDetail(null);
+    setDetailError(null);
+  }, [emailView, mailbox]);
 
   const loadList = useCallback(async () => {
     setLoading(true);
@@ -127,6 +140,9 @@ export function EmailsBrowsePanel({
     }
     try {
       params.set("mailbox", mailbox);
+      if (mailbox === "emails") {
+        params.set("view", emailView);
+      }
       const res = await fetch(`/api/workspace/emails?${params.toString()}`);
       const data = (await res.json()) as ApiListOk & ApiErr;
       if (!res.ok) {
@@ -147,7 +163,7 @@ export function EmailsBrowsePanel({
     } finally {
       setLoading(false);
     }
-  }, [page, debouncedQuery, pageSize, mailbox]);
+  }, [page, debouncedQuery, pageSize, mailbox, emailView]);
 
   useEffect(() => {
     void loadList();
@@ -236,6 +252,35 @@ export function EmailsBrowsePanel({
     void loadList();
   }, [selectedId, loadDetail, loadList]);
 
+  const setRowArchived = useCallback(
+    async (rowId: string, archived: boolean) => {
+      setArchiveBusyId(rowId);
+      try {
+        const res = await fetch(`/api/workspace/emails/${rowId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ archived }),
+        });
+        const data = (await res.json()) as ApiErr;
+        if (!res.ok) {
+          const parts = [data.error, data.hint].filter(
+            (x): x is string => typeof x === "string" && x.length > 0,
+          );
+          setError(parts.length > 0 ? parts.join(" ") : "Could not update email.");
+          return;
+        }
+        setError(null);
+        if (selectedId === rowId) void loadDetail(rowId);
+        void loadList();
+      } catch {
+        setError("Network error while updating email.");
+      } finally {
+        setArchiveBusyId(null);
+      }
+    },
+    [loadList, loadDetail, selectedId],
+  );
+
   const onSearchSubmit = (e: FormEvent) => {
     e.preventDefault();
     setDebouncedQuery(queryInput.trim());
@@ -265,11 +310,49 @@ export function EmailsBrowsePanel({
                       ? "No matches for that search."
                       : mailbox === "call_logs"
                         ? "No call logs yet. Meeting-note/transcript emails (Otter, Zoom, Fireflies, Granola, Gemini, etc.) will show here."
-                        : "No messages yet. When Rex is copied or forwarded on email, they will appear here."
+                        : emailView === "archived"
+                          ? "No archived messages."
+                          : "No messages yet. When Rex is copied or forwarded on email, they will appear here."
                     : `Showing ${from}–${to} of ${total}`}
               </p>
             </div>
           </div>
+          {mailbox === "emails" ? (
+            <div
+              className="mt-4 flex flex-wrap gap-2"
+              role="tablist"
+              aria-label="Emails folder"
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected={emailView === "inbox"}
+                onClick={() => setEmailView("inbox")}
+                className={
+                  EMAILS_TAB_BTN +
+                  (emailView === "inbox"
+                    ? " border-charcoal bg-charcoal text-cream"
+                    : " border-charcoal/15 bg-cream text-charcoal-light hover:bg-cream-light")
+                }
+              >
+                Inbox
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={emailView === "archived"}
+                onClick={() => setEmailView("archived")}
+                className={
+                  EMAILS_TAB_BTN +
+                  (emailView === "archived"
+                    ? " border-charcoal bg-charcoal text-cream"
+                    : " border-charcoal/15 bg-cream text-charcoal-light hover:bg-cream-light")
+                }
+              >
+                Archived
+              </button>
+            </div>
+          ) : null}
           <form onSubmit={onSearchSubmit} className="mt-4 block">
             <label htmlFor="emails-search" className={WORKSPACE_FORM_LABEL_CLASS}>
               Search
@@ -303,14 +386,16 @@ export function EmailsBrowsePanel({
                 ))
               : rows.map((row) => {
                   const active = row.id === selectedId;
+                  const archiveBusy = archiveBusyId === row.id;
+                  const showArchiveActions = mailbox === "emails";
                   return (
-                    <li key={row.id}>
+                    <li key={row.id} className="flex min-w-0 items-stretch">
                       <button
                         type="button"
                         onClick={() => selectRow(row.id)}
                         className={[
                           WORKSPACE_BROWSE_ROW_BUTTON_CLASS,
-                          "items-center py-3",
+                          "min-w-0 flex-1 items-center py-3 !w-auto",
                           active ? "bg-charcoal/6" : "",
                         ].join(" ")}
                         aria-current={active ? "true" : undefined}
@@ -349,6 +434,24 @@ export function EmailsBrowsePanel({
                           ) : null}
                         </div>
                       </button>
+                      {showArchiveActions ? (
+                        <div className="flex shrink-0 items-stretch border-l border-charcoal/6">
+                          <button
+                            type="button"
+                            disabled={archiveBusy}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              void setRowArchived(
+                                row.id,
+                                emailView !== "archived",
+                              );
+                            }}
+                            className="flex items-center px-2.5 py-2 text-[11px] font-medium text-charcoal-light transition-colors hover:bg-charcoal/5 hover:text-charcoal disabled:cursor-not-allowed sm:px-3"
+                          >
+                            {emailView === "archived" ? "Unarchive" : "Archive"}
+                          </button>
+                        </div>
+                      ) : null}
                     </li>
                   );
                 })}
@@ -392,12 +495,16 @@ export function EmailsBrowsePanel({
                 type="button"
                 onClick={clearSelection}
                 className="rounded-lg p-2 text-charcoal-light hover:bg-charcoal/6 lg:hidden"
-                aria-label="Back to inbox"
+                aria-label="Back to email list"
               >
                 <ArrowLeft className="size-5" strokeWidth={1.75} aria-hidden />
               </button>
               <p className="min-w-0 flex-1 truncate text-xs font-medium text-charcoal-light lg:hidden">
-                Inbox
+                {mailbox === "call_logs"
+                  ? "Call logs"
+                  : emailView === "archived"
+                    ? "Archived"
+                    : "Inbox"}
               </p>
             </div>
 

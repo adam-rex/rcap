@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { getWorkspaceWriteClient } from "@/lib/data/workspace-mutations";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import type {
   WorkspaceEmailAttachmentRow,
@@ -108,6 +109,8 @@ export async function fetchWorkspaceEmailsPageWithClient(
     page: number;
     pageSize: number;
     mailbox?: "emails" | "call_logs";
+    /** Inbox vs archived listing; only applies when mailbox is emails. */
+    emailView?: "inbox" | "archived";
   },
 ): Promise<WorkspaceEmailsPageResult> {
   const page = Math.max(1, Math.floor(params.page));
@@ -124,6 +127,15 @@ export async function fetchWorkspaceEmailsPageWithClient(
       count: "exact",
     })
     .order("received_at", { ascending: false });
+
+  if (params.mailbox !== "call_logs") {
+    const view = params.emailView ?? "inbox";
+    if (view === "archived") {
+      q = q.not("archived_at", "is", null);
+    } else {
+      q = q.is("archived_at", null);
+    }
+  }
 
   if (params.mailbox === "call_logs") {
     q = q.or(
@@ -192,9 +204,47 @@ export async function getWorkspaceEmailsPage(params: {
   page: number;
   pageSize: number;
   mailbox?: "emails" | "call_logs";
+  emailView?: "inbox" | "archived";
 }): Promise<WorkspaceEmailsPageResult> {
   const client = await createServerSupabaseClient();
   return fetchWorkspaceEmailsPageWithClient(client, params);
+}
+
+export type WorkspaceEmailArchiveResult = {
+  id: string;
+  archivedAt: string | null;
+};
+
+export async function setWorkspaceEmailArchivedWithClient(
+  client: SupabaseClient,
+  id: string,
+  archived: boolean,
+): Promise<WorkspaceEmailArchiveResult | null> {
+  const archived_at = archived ? new Date().toISOString() : null;
+  const { data, error } = await client
+    .from("rex_inbound_emails")
+    .update({ archived_at })
+    .eq("id", id)
+    .select("id,archived_at")
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) return null;
+
+  const row = data as Record<string, unknown>;
+  const raw = row.archived_at;
+  return {
+    id: String(row.id ?? ""),
+    archivedAt: raw == null ? null : String(raw),
+  };
+}
+
+export async function setWorkspaceEmailArchived(
+  id: string,
+  archived: boolean,
+): Promise<WorkspaceEmailArchiveResult | null> {
+  const client = await getWorkspaceWriteClient();
+  return setWorkspaceEmailArchivedWithClient(client, id, archived);
 }
 
 export async function fetchWorkspaceEmailDetailWithClient(
