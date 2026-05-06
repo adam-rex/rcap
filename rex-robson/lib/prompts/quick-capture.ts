@@ -2,10 +2,14 @@ import { joinPromptSections } from "./compose";
 import { REX_PERSONA_CORE } from "./persona";
 
 const QUICK_CAPTURE_CHANNEL = `
-The user just met this person in real life. They are capturing the contact on the fly via a typed note, a dictated voice note (Whisper transcript), or a photo/PDF of a business card, email signature, CV, or similar. Treat whatever they provide as the only source of truth about this person.
+The user just met this person in real life. They are capturing the contact on the fly via a typed note, a dictated voice note (Whisper transcript), a photo/PDF of a business card, email signature, CV, or similar, and/or excerpts from public web pages they chose (about the person, their company, or a team bio page).
+
+Sources of truth:
+- Treat the user's note, any attached scans/PDFs, and any provided page excerpts as your only evidence about this person.
+- When page excerpts are included, facts clearly stated in those excerpts are as authoritative as the user's note and attachments.
+- Never invent a name, email, phone, or company that does not appear in any of these sources. If a field is not there, leave it blank ("").
 
 Rules:
-- Never invent a name, email, phone, or company. If the field is not in the input, leave it blank ("").
 - Prefer short, factual values. Titles in \`role\` (e.g. "Partner", "Head of Credit"). Single sector (e.g. "Fintech", "Real Estate"). Geography as city, region, or country as written.
 - \`contactType\` must be exactly one of: "Founder", "Investor", "Lender", "Advisor", "Corporate", "Other". Guidance:
   - "Founder" — currently builds/runs an operating company. Position is "Founder", "Co-founder", or "Founding [executive role]" (CEO/CTO/COO/CFO/President), OR is C-suite at a clear startup. NOT "Founding Engineer", "Founding Designer", or other early-employee titles (those are Corporate). NOT "Founding Partner" at a law/accounting/consulting firm (that's about firm-founding, not company-founding).
@@ -69,19 +73,29 @@ export function buildQuickCaptureSystemPrompt(): string {
   );
 }
 
-export function buildQuickCaptureTextUserContent(text: string): string {
-  return `The user just met someone. Here is their note (verbatim, may be a voice transcript):
+export function buildQuickCaptureTextUserContent(
+  text: string,
+  options?: { fetchedPages?: string },
+): string {
+  const note = text.trim();
+  const pages = options?.fetchedPages?.trim();
+  let out = `The user just met someone. Here is their note (verbatim, may be a voice transcript; may be empty if they only supplied links):
 
 """
-${text.trim()}
+${note}
 """
-
-Return the JSON object now.`;
+`;
+  if (pages) {
+    out += `\n${pages}\n`;
+  }
+  out += `\nReturn the JSON object now.`;
+  return out;
 }
 
 export function buildQuickCaptureDocumentUserPreamble(options: {
   text?: string;
   documentCount: number;
+  fetchedPages?: string;
 }): string {
   const noteBlock = options.text?.trim()
     ? `User's accompanying note (verbatim):
@@ -93,9 +107,14 @@ ${options.text.trim()}
 `
     : "";
   const files = options.documentCount === 1 ? "file" : `${options.documentCount} files`;
-  return `${noteBlock}The user just met someone and attached the ${files} above (photo of a card, email signature, CV, or similar). Extract what the file(s) say about the person.
-
-Return the JSON object now.`;
+  const pages = options.fetchedPages?.trim();
+  let out = `${noteBlock}The user just met someone and attached the ${files} above (photo of a card, email signature, CV, or similar). Extract what the file(s) say about the person.
+`;
+  if (pages) {
+    out += `\n${pages}\n`;
+  }
+  out += `\nReturn the JSON object now.`;
+  return out;
 }
 
 export type QuickCaptureDraft = {

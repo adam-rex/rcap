@@ -24,6 +24,7 @@ import { INTERNAL_CONTACT_OWNERS } from "@/lib/constants/internal-contact-owners
 import type { WorkspaceOrganisationPageRow } from "@/lib/data/workspace-organisations-page.types";
 import { WORKSPACE_ORGANISATIONS_PAGE_SIZE_MAX } from "@/lib/data/workspace-organisations-page.types";
 import type { QuickCaptureDraft } from "@/lib/prompts/quick-capture";
+import { parseWebsiteUrlInputs } from "@/lib/rex/quick-capture-urls";
 import {
   WORKSPACE_FORM_BTN_PRIMARY,
   WORKSPACE_FORM_BTN_SECONDARY,
@@ -170,6 +171,7 @@ export function QuickCaptureDialog({
   const [form, setForm] = useState<ReviewForm>(() => emptyForm());
 
   const [textInput, setTextInput] = useState("");
+  const [websiteUrlsInput, setWebsiteUrlsInput] = useState("");
   const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [dragActive, setDragActive] = useState(false);
   const uploadInputId = useId();
@@ -219,6 +221,7 @@ export function QuickCaptureDialog({
     setPhase("compose");
     setError(null);
     setTextInput("");
+    setWebsiteUrlsInput("");
     setUploadFiles([]);
     setTranscript("");
     setRecordingState("idle");
@@ -271,7 +274,11 @@ export function QuickCaptureDialog({
   );
 
   const applyDraft = useCallback(
-    (draft: QuickCaptureDraft, fallbackNotes: string) => {
+    (
+      draft: QuickCaptureDraft,
+      fallbackNotes: string,
+      sourceUrls: string[],
+    ) => {
       const matchedOrg = draft.organisationName
         ? orgOptions.find(
             (o) =>
@@ -279,6 +286,11 @@ export function QuickCaptureDialog({
               draft.organisationName.trim().toLowerCase(),
           )
         : undefined;
+      const baseNotes = (draft.notes || fallbackNotes).trimEnd();
+      const sources =
+        sourceUrls.length > 0
+          ? `${baseNotes ? `${baseNotes}\n\n` : ""}Sources:\n${sourceUrls.map((u) => `- ${u}`).join("\n")}`
+          : draft.notes || fallbackNotes;
       setForm({
         name: draft.name,
         contactType: draft.contactType || "",
@@ -296,7 +308,7 @@ export function QuickCaptureDialog({
         geography: draft.geography,
         phone: draft.phone,
         email: draft.email,
-        notes: draft.notes || fallbackNotes,
+        notes: sources,
         lowConfidence: draft.lowConfidence,
         rexSummary: draft.rexSummary,
       });
@@ -305,9 +317,11 @@ export function QuickCaptureDialog({
   );
 
   const submitExtraction = useCallback(
-    async (input:
-      | { kind: "text"; text: string }
-      | { kind: "upload"; text: string; files: File[] }) => {
+    async (
+      input:
+        | { kind: "text"; text: string; urls: string[] }
+        | { kind: "upload"; text: string; files: File[]; urls: string[] },
+    ) => {
       setPhase("extracting");
       setError(null);
       try {
@@ -316,11 +330,12 @@ export function QuickCaptureDialog({
           res = await fetch("/api/rex/capture", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text: input.text }),
+            body: JSON.stringify({ text: input.text, urls: input.urls }),
           });
         } else {
           const fd = new FormData();
           if (input.text.trim()) fd.append("text", input.text);
+          for (const u of input.urls) fd.append("url", u);
           for (const f of input.files) fd.append("documents", f, f.name);
           res = await fetch("/api/rex/capture", {
             method: "POST",
@@ -336,7 +351,11 @@ export function QuickCaptureDialog({
           setError(data.error ?? "Rex couldn't read that. Try again.");
           return;
         }
-        applyDraft(data.draft, input.kind === "text" ? input.text : "");
+        applyDraft(
+          data.draft,
+          input.kind === "text" ? input.text : "",
+          input.urls,
+        );
         setPhase("review");
       } catch {
         setPhase("compose");
@@ -350,29 +369,32 @@ export function QuickCaptureDialog({
     async (e: FormEvent) => {
       e.preventDefault();
       const trimmed = textInput.trim();
-      if (trimmed.length < 3) {
+      const urls = parseWebsiteUrlInputs(websiteUrlsInput);
+      if (trimmed.length < 3 && urls.length === 0) {
         setError("Add a few more details so Rex has something to work with.");
         return;
       }
-      await submitExtraction({ kind: "text", text: trimmed });
+      await submitExtraction({ kind: "text", text: trimmed, urls });
     },
-    [textInput, submitExtraction],
+    [textInput, websiteUrlsInput, submitExtraction],
   );
 
   const onSubmitUpload = useCallback(
     async (e: FormEvent) => {
       e.preventDefault();
-      if (uploadFiles.length === 0) {
-        setError("Attach a photo or PDF first.");
+      const urls = parseWebsiteUrlInputs(websiteUrlsInput);
+      if (uploadFiles.length === 0 && urls.length === 0) {
+        setError("Attach a file or add at least one https URL.");
         return;
       }
       await submitExtraction({
         kind: "upload",
         text: textInput.trim(),
         files: uploadFiles,
+        urls,
       });
     },
-    [uploadFiles, textInput, submitExtraction],
+    [uploadFiles, textInput, websiteUrlsInput, submitExtraction],
   );
 
   const addUploadFiles = useCallback((list: FileList | null) => {
@@ -615,19 +637,28 @@ export function QuickCaptureDialog({
         body: fd,
       });
       const data = (await res.json()) as { transcript?: string; error?: string };
-      if (!res.ok || !data.transcript) {
+      const urls = parseWebsiteUrlInputs(websiteUrlsInput);
+      if (!res.ok) {
         setRecordingState("stopped");
         setError(data.error ?? "Couldn't transcribe that. Try again.");
         return;
       }
-      setTranscript(data.transcript);
+      const transcript = typeof data.transcript === "string" ? data.transcript : "";
+      if (transcript.trim().length < 3 && urls.length === 0) {
+        setRecordingState("stopped");
+        setError(
+          "Add a website URL or record a clearer note (a few words about the person).",
+        );
+        return;
+      }
+      setTranscript(transcript);
       setRecordingState("idle");
-      await submitExtraction({ kind: "text", text: data.transcript });
+      await submitExtraction({ kind: "text", text: transcript, urls });
     } catch {
       setRecordingState("stopped");
       setError("Network error while transcribing.");
     }
-  }, [submitExtraction]);
+  }, [submitExtraction, websiteUrlsInput]);
 
   useEffect(() => () => releaseRecorder(), [releaseRecorder]);
 
@@ -786,6 +817,26 @@ export function QuickCaptureDialog({
           </p>
           <ModeTabs active={mode} onChange={setMode} />
 
+          <div className="mt-4 space-y-2">
+            <label htmlFor="qc-websites" className={WORKSPACE_FORM_LABEL_CLASS}>
+              Websites (optional)
+            </label>
+            <textarea
+              id="qc-websites"
+              value={websiteUrlsInput}
+              onChange={(e) => setWebsiteUrlsInput(e.target.value)}
+              rows={3}
+              placeholder={
+                "https://example.com/about-jane\nOne https URL per line. Rex fetches public page text to fill the profile."
+              }
+              className={`${WORKSPACE_FORM_INPUT_CLASS} resize-y font-mono text-[13px]`}
+            />
+            <p className="text-xs text-charcoal-light/85">
+              Public https pages only. Logged-in or heavy JavaScript sites may
+              not return much text.
+            </p>
+          </div>
+
           {mode === "text" ? (
             <form onSubmit={onSubmitText} className="mt-4 space-y-3">
               <label className="sr-only" htmlFor="qc-text">
@@ -816,7 +867,10 @@ export function QuickCaptureDialog({
                 <button
                   type="submit"
                   className={WORKSPACE_FORM_BTN_PRIMARY}
-                  disabled={textInput.trim().length < 3}
+                  disabled={
+                    textInput.trim().length < 3 &&
+                    parseWebsiteUrlInputs(websiteUrlsInput).length === 0
+                  }
                 >
                   <span className="inline-flex items-center gap-1.5">
                     <Sparkles className="size-3.5" aria-hidden />
@@ -1024,7 +1078,10 @@ export function QuickCaptureDialog({
                 <button
                   type="submit"
                   className={WORKSPACE_FORM_BTN_PRIMARY}
-                  disabled={uploadFiles.length === 0}
+                  disabled={
+                    uploadFiles.length === 0 &&
+                    parseWebsiteUrlInputs(websiteUrlsInput).length === 0
+                  }
                 >
                   <span className="inline-flex items-center gap-1.5">
                     <Sparkles className="size-3.5" aria-hidden />

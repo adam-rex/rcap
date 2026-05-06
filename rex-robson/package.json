@@ -15,12 +15,14 @@
     "db:seed:tasks": "tsx scripts/seed/tasks.ts",
     "db:seed:contacts-sample": "tsx scripts/seed/fillContactSampleData.ts",
     "db:push": "supabase db push",
-    "verify:rex-email": "tsx scripts/verify-rex-email-setup.ts"
+    "verify:rex-email": "tsx scripts/verify-rex-email-setup.ts",
+    "verify:quick-capture-ssrf": "tsx scripts/verify-quick-capture-ssrf.ts"
   },
   "dependencies": {
     "@fontsource/playfair-display": "^5.2.8",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.103.0",
+    "linkedom": "^0.18.12",
     "lucide-react": "^0.544.0",
     "mailparser": "^3.9.8",
     "next": "16.2.3",

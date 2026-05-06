@@ -10,6 +10,14 @@ import type {
   AnthropicImageMediaType,
 } from "@/lib/prompts/types";
 import { completeAnthropicMessage } from "@/lib/rex/anthropic-messages";
+import {
+  fetchPublicPageTexts,
+  formatFetchedPagesForPrompt,
+} from "@/lib/rex/fetch-public-page-text";
+import {
+  parseWebsiteUrlInputs,
+  QUICK_CAPTURE_FETCH_MAX_URLS,
+} from "@/lib/rex/quick-capture-urls";
 
 export const runtime = "nodejs";
 
@@ -27,8 +35,49 @@ type ExtractedAttachment =
     };
 
 type Parsed =
-  | { ok: true; text: string; attachments: ExtractedAttachment[] }
+  | { ok: true; text: string; attachments: ExtractedAttachment[]; urls: string[] }
   | { ok: false; error: string };
+
+function dedupeUrlStrings(urls: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const u of urls) {
+    const t = u.trim();
+    if (!t) continue;
+    const key = t.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(t);
+  }
+  return out;
+}
+
+function collectUrlsFromJson(body: Record<string, unknown>): string[] {
+  const raw = body["urls"];
+  const list: string[] = [];
+  if (Array.isArray(raw)) {
+    for (const item of raw) {
+      if (typeof item === "string" && item.trim()) list.push(item.trim());
+    }
+  } else if (typeof raw === "string" && raw.trim()) {
+    list.push(...parseWebsiteUrlInputs(raw));
+  }
+  return dedupeUrlStrings(list).slice(0, QUICK_CAPTURE_FETCH_MAX_URLS);
+}
+
+function collectUrlsFromForm(form: FormData): string[] {
+  const list: string[] = [];
+  for (const entry of form.getAll("url")) {
+    if (typeof entry === "string" && entry.trim()) {
+      list.push(...parseWebsiteUrlInputs(entry));
+    }
+  }
+  const blob = form.get("urls");
+  if (typeof blob === "string" && blob.trim()) {
+    list.push(...parseWebsiteUrlInputs(blob));
+  }
+  return dedupeUrlStrings(list).slice(0, QUICK_CAPTURE_FETCH_MAX_URLS);
+}
 
 function detectImageMediaType(
   mime: string,
@@ -56,6 +105,7 @@ async function parseRequest(req: Request): Promise<Parsed> {
     const rawText = form.get("text");
     const text =
       typeof rawText === "string" ? rawText.slice(0, MAX_TEXT_CHARS) : "";
+    const urls = collectUrlsFromForm(form);
     const entries: File[] = [];
     for (const key of ["documents", "images", "files"] as const) {
       for (const entry of form.getAll(key)) {
@@ -86,14 +136,18 @@ async function parseRequest(req: Request): Promise<Parsed> {
         });
       }
     }
-    return { ok: true, text, attachments };
+    return { ok: true, text, attachments, urls };
   }
 
   try {
-    const body = (await req.json()) as { text?: unknown };
+    const body = (await req.json()) as {
+      text?: unknown;
+      urls?: unknown;
+    };
     const text =
       typeof body.text === "string" ? body.text.slice(0, MAX_TEXT_CHARS) : "";
-    return { ok: true, text, attachments: [] };
+    const urls = collectUrlsFromJson(body as Record<string, unknown>);
+    return { ok: true, text, attachments: [], urls };
   } catch {
     return { ok: false, error: "Invalid JSON body" };
   }
@@ -102,9 +156,11 @@ async function parseRequest(req: Request): Promise<Parsed> {
 function buildUserContent(
   text: string,
   attachments: ExtractedAttachment[],
+  fetchedPages?: string,
 ): AnthropicContentBlock[] | string {
+  const pages = fetchedPages?.trim() || undefined;
   if (attachments.length === 0) {
-    return buildQuickCaptureTextUserContent(text);
+    return buildQuickCaptureTextUserContent(text, { fetchedPages: pages });
   }
   const blocks: AnthropicContentBlock[] = [];
   for (const att of attachments) {
@@ -134,6 +190,7 @@ function buildUserContent(
     text: buildQuickCaptureDocumentUserPreamble({
       text,
       documentCount: attachments.length,
+      fetchedPages: pages,
     }),
   });
   return blocks;
@@ -149,17 +206,44 @@ export async function POST(req: Request) {
     return Response.json({ error: parsed.error }, { status: 400 });
   }
 
-  const { text, attachments } = parsed;
-  if (text.trim().length === 0 && attachments.length === 0) {
+  const { text, attachments, urls } = parsed;
+  const hasInput =
+    text.trim().length > 0 || attachments.length > 0 || urls.length > 0;
+  if (!hasInput) {
     return Response.json(
-      { error: "Send a note or attach a document/image." },
+      {
+        error:
+          "Send a note, attach a document/image, or add at least one https URL.",
+      },
       { status: 400 },
     );
   }
 
+  const pageResults = urls.length > 0 ? await fetchPublicPageTexts(urls) : [];
+  const fetchedBlock = formatFetchedPagesForPrompt(pageResults);
+  const anyPageOk = pageResults.some((r) => r.ok);
+  const urlsOnly =
+    text.trim().length === 0 && attachments.length === 0 && urls.length > 0;
+  if (urlsOnly && !anyPageOk) {
+    return Response.json(
+      {
+        error:
+          "Could not fetch any of the URLs. Check that they are public https pages, then try again.",
+      },
+      { status: 400 },
+    );
+  }
+
+  const fetchedPagesForPrompt =
+    fetchedBlock.length > 0 ? fetchedBlock : undefined;
+
   try {
     const system = buildQuickCaptureSystemPrompt();
-    const userContent = buildUserContent(text, attachments);
+    const userContent = buildUserContent(
+      text,
+      attachments,
+      fetchedPagesForPrompt,
+    );
 
     const raw = await completeAnthropicMessage({
       system,
