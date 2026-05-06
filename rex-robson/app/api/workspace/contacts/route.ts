@@ -37,6 +37,9 @@ export async function POST(req: Request) {
       email: fields.value.email,
       website_url: fields.value.websiteUrl,
       notes: fields.value.notes,
+      deal_types: fields.value.dealTypes,
+      min_deal_size: fields.value.minDealSize,
+      max_deal_size: fields.value.maxDealSize,
       internal_owner: fields.value.internalOwner,
     });
     return NextResponse.json(row, { status: 201 });

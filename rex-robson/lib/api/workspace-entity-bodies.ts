@@ -1,7 +1,9 @@
 import {
   isValidUuid,
   parseOptionalString,
+  parseOptionalStringArray,
   parseOptionalUuid,
+  parseOptionalNumber,
   parseRequiredString,
 } from "@/lib/api/workspace-post-parse";
 import type {
@@ -52,6 +54,9 @@ export type ContactUpsertBody = {
   /** Public profile or site URL (https recommended). */
   websiteUrl: string | null;
   notes: string | null;
+  dealTypes: string[] | null;
+  minDealSize: number | null;
+  maxDealSize: number | null;
   /** Rex team member who added the contact (internal). */
   internalOwner: string | null;
 };
@@ -81,6 +86,12 @@ export function parseContactUpsertBody(
   if (!websiteUrl.ok) return websiteUrl;
   const notes = parseOptionalString(body, "notes", 8000);
   if (!notes.ok) return notes;
+  const dealTypes = parseOptionalStringArray(body, "dealTypes", 32, 120);
+  if (!dealTypes.ok) return dealTypes;
+  const minDealSize = parseOptionalNumber(body, "minDealSize");
+  if (!minDealSize.ok) return minDealSize;
+  const maxDealSize = parseOptionalNumber(body, "maxDealSize");
+  if (!maxDealSize.ok) return maxDealSize;
   const internalOwnerRaw = body["internalOwner"];
   let internalOwner: string | null = null;
   if (internalOwnerRaw != null) {
@@ -111,6 +122,9 @@ export function parseContactUpsertBody(
       email: email.value,
       websiteUrl: websiteUrl.value,
       notes: notes.value,
+      dealTypes: dealTypes.value,
+      minDealSize: minDealSize.value,
+      maxDealSize: maxDealSize.value,
       internalOwner,
     },
   };

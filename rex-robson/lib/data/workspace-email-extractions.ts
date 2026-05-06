@@ -193,6 +193,9 @@ export async function applyRexEmailExtraction(
           email: optStr(p.email),
           website_url: null,
           notes: optStr(p.notes),
+          deal_types: null,
+          min_deal_size: null,
+          max_deal_size: null,
           internal_owner: null,
         });
         await markApplied(client, params.extractionId, {

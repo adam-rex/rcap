@@ -88,6 +88,40 @@ export function parseOptionalNumber(
   return { ok: false, error: `${key} must be a number` };
 }
 
+/** Optional string array (null / missing = null). Empty array after trim = null. */
+export function parseOptionalStringArray(
+  body: Record<string, unknown>,
+  key: string,
+  maxItems: number,
+  maxItemLen: number,
+):
+  | { ok: true; value: string[] | null }
+  | { ok: false; error: string } {
+  const v = body[key];
+  if (v == null) {
+    return { ok: true, value: null };
+  }
+  if (!Array.isArray(v)) {
+    return { ok: false, error: `${key} must be an array or null` };
+  }
+  if (v.length > maxItems) {
+    return { ok: false, error: `${key} must have at most ${maxItems} items` };
+  }
+  const out: string[] = [];
+  for (const item of v) {
+    if (typeof item !== "string") {
+      return { ok: false, error: `${key} items must be strings` };
+    }
+    const t = item.trim();
+    if (t === "") continue;
+    if (t.length > maxItemLen) {
+      return { ok: false, error: `${key} item is too long` };
+    }
+    out.push(t);
+  }
+  return { ok: true, value: out.length > 0 ? out : null };
+}
+
 export async function readJsonObject(req: Request): Promise<
   | { ok: true; body: Record<string, unknown> }
   | { ok: false; error: string }

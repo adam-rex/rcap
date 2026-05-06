@@ -86,6 +86,9 @@ export async function insertWorkspaceContact(
     email: string | null;
     website_url: string | null;
     notes: string | null;
+    deal_types: string[] | null;
+    min_deal_size: number | null;
+    max_deal_size: number | null;
     internal_owner: string | null;
   },
 ): Promise<CreatedContactRow> {
@@ -102,6 +105,9 @@ export async function insertWorkspaceContact(
       email: input.email,
       website_url: input.website_url,
       notes: input.notes,
+      deal_types: input.deal_types,
+      min_deal_size: input.min_deal_size,
+      max_deal_size: input.max_deal_size,
       internal_owner: input.internal_owner,
     })
     .select(
@@ -169,9 +175,34 @@ export type WorkspaceContactDetail = {
   email: string | null;
   website_url: string | null;
   notes: string | null;
+  deal_types: string[] | null;
+  min_deal_size: number | null;
+  max_deal_size: number | null;
   internal_owner: string | null;
   last_contact_date: string | null;
 };
+
+function coerceNumericField(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const n = Number.parseFloat(value);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+function coerceDealTypesColumn(value: unknown): string[] | null {
+  if (value == null) return null;
+  if (!Array.isArray(value)) return null;
+  const out: string[] = [];
+  for (const item of value) {
+    if (typeof item === "string" && item.trim().length > 0) {
+      out.push(item.trim());
+    }
+  }
+  return out.length > 0 ? out : null;
+}
 
 function mapContactDetailFromRow(
   data: Record<string, unknown>,
@@ -196,6 +227,9 @@ function mapContactDetailFromRow(
     website_url:
       data.website_url == null ? null : String(data.website_url),
     notes: data.notes == null ? null : String(data.notes),
+    deal_types: coerceDealTypesColumn(data.deal_types),
+    min_deal_size: coerceNumericField(data.min_deal_size),
+    max_deal_size: coerceNumericField(data.max_deal_size),
     internal_owner:
       data.internal_owner == null ? null : String(data.internal_owner),
     last_contact_date: lastContactDate,
@@ -207,7 +241,7 @@ export async function fetchWorkspaceContactById(
   id: string,
 ): Promise<WorkspaceContactDetail | null> {
   const fullSelect =
-    "id,name,contact_type,sector,organisation_id,role,geography,phone,email,website_url,notes,internal_owner,last_contact_date";
+    "id,name,contact_type,sector,organisation_id,role,geography,phone,email,website_url,notes,deal_types,min_deal_size,max_deal_size,internal_owner,last_contact_date";
   const fallbackSelect =
     "id,name,contact_type,sector,organisation_id,role,geography,phone,email,notes,internal_owner";
 
@@ -357,6 +391,9 @@ export async function updateWorkspaceContact(
     email: string | null;
     website_url: string | null;
     notes: string | null;
+    deal_types: string[] | null;
+    min_deal_size: number | null;
+    max_deal_size: number | null;
     internal_owner: string | null;
   },
 ): Promise<CreatedContactRow | null> {
@@ -373,6 +410,9 @@ export async function updateWorkspaceContact(
       email: input.email,
       website_url: input.website_url,
       notes: input.notes,
+      deal_types: input.deal_types,
+      min_deal_size: input.min_deal_size,
+      max_deal_size: input.max_deal_size,
       internal_owner: input.internal_owner,
     })
     .eq("id", id)

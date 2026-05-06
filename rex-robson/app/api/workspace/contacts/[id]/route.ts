@@ -36,6 +36,9 @@ export async function GET(_req: Request, context: RouteContext) {
       email: row.email,
       websiteUrl: row.website_url ?? null,
       notes: row.notes,
+      dealTypes: row.deal_types ?? null,
+      minDealSize: row.min_deal_size ?? null,
+      maxDealSize: row.max_deal_size ?? null,
       internalOwner: row.internal_owner,
       lastContactDate: row.last_contact_date,
     });
@@ -76,6 +79,9 @@ export async function PATCH(req: Request, context: RouteContext) {
       email: fields.value.email,
       website_url: fields.value.websiteUrl,
       notes: fields.value.notes,
+      deal_types: fields.value.dealTypes,
+      min_deal_size: fields.value.minDealSize,
+      max_deal_size: fields.value.maxDealSize,
       internal_owner: fields.value.internalOwner,
     });
     if (!row) {
