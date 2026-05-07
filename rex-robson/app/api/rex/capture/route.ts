@@ -14,6 +14,7 @@ import {
   fetchPublicPageTexts,
   formatFetchedPagesForPrompt,
 } from "@/lib/rex/fetch-public-page-text";
+import { normalizeImageForAnthropicVision } from "@/lib/rex/normalize-quick-capture-image";
 import {
   parseWebsiteUrlInputs,
   QUICK_CAPTURE_FETCH_MAX_URLS,
@@ -128,10 +129,11 @@ async function parseRequest(req: Request): Promise<Parsed> {
       }
       const imageMedia = detectImageMediaType(mime, entry.name);
       if (imageMedia) {
+        const normalized = await normalizeImageForAnthropicVision(buf, imageMedia);
         attachments.push({
           kind: "image",
-          mediaType: imageMedia,
-          base64: buf.toString("base64"),
+          mediaType: normalized.mediaType,
+          base64: normalized.base64,
           title: entry.name,
         });
       }
