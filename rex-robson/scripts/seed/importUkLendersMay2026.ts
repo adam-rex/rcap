@@ -6,6 +6,7 @@
  *   npx tsx scripts/seed/importUkLendersMay2026.ts
  *   npx tsx scripts/seed/importUkLendersMay2026.ts --dry-run
  *   npx tsx scripts/seed/importUkLendersMay2026.ts --patch-geography  # set UK on this import batch
+ *   npx tsx scripts/seed/importUkLendersMay2026.ts --patch-bl-notes   # expand BL → business loan in notes (this import batch)
  *
  * Requires .env.local with NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.
  */
@@ -71,14 +72,14 @@ const LENDERS: LenderRow[] = [
   {
     institution: "Fleximize",
     email: "leeandmarney@fleximize.com",
-    notes: `Unsecured business loan (BL) | £10k–£250k | Monthly turnover x1.25 | 2%–3.50% pm | 3–42 months | 6 months trading | Min. turnover £100k | No Scotland/NI secured | No ERPs | Contact: leeandmarney@fleximize.com`,
+    notes: `Unsecured business loan | £10k–£250k | Monthly turnover x1.25 | 2%–3.50% pm | 3–42 months | 6 months trading | Min. turnover £100k | No Scotland/NI secured | No ERPs | Contact: leeandmarney@fleximize.com`,
   },
   {
     institution: "Credit4",
     email: null,
-    notes: `Unsecured BL | £30k–£150k | 5–50% annual turnover | 2% pm | 12–24 months | 6 months trading | Min. turnover £100k | Arrangement fee 4% | Also wants cashflow forecast + last 2x VAT returns
+    notes: `Unsecured business loan | £30k–£150k | 5–50% annual turnover | 2% pm | 12–24 months | 6 months trading | Min. turnover £100k | Arrangement fee 4% | Also wants cashflow forecast + last 2x VAT returns
 
-RCF | £15k–£30k | 5–50% turnover | 2.50% pm | 3–12 months | Same requirements as unsecured BL above`,
+RCF | £15k–£30k | 5–50% turnover | 2.50% pm | 3–12 months | Same requirements as unsecured business loan above`,
   },
   {
     institution: "365 Business Finance",
@@ -93,77 +94,77 @@ RCF | £15k–£30k | 5–50% turnover | 2.50% pm | 3–12 months | Same require
   {
     institution: "MaxCap",
     email: "sales@maxcap.co.uk",
-    notes: `Unsecured BL | £10k–£350k (loans >£100k) | 100–200% monthly turnover | 3%–5% pm | 6–12 months | 12 months trading | Min. turnover £180k | Open banking required | Contact: sales@maxcap.co.uk`,
+    notes: `Unsecured business loan | £10k–£350k (loans >£100k) | 100–200% monthly turnover | 3%–5% pm | 6–12 months | 12 months trading | Min. turnover £180k | Open banking required | Contact: sales@maxcap.co.uk`,
   },
   {
     institution: "Little Business Loans",
     email: null,
-    notes: `Unsecured BL | £3k–£20k | 10% turnover | 2.50%–3.50% pm | 6–12 months | 12 months trading | Min. turnover £120k | No Scotland/NI | Refuses: recruitment, letting agents`,
+    notes: `Unsecured business loan | £3k–£20k | 10% turnover | 2.50%–3.50% pm | 6–12 months | 12 months trading | Min. turnover £120k | No Scotland/NI | Refuses: recruitment, letting agents`,
   },
   {
     institution: "Swiftfund",
     email: null,
-    notes: `Unsecured BL | £10k–£100k | Factor rate 1.3–1.5 | 6–12 months | 12 months trading | Min. turnover £240k`,
+    notes: `Unsecured business loan | £10k–£100k | Factor rate 1.3–1.5 | 6–12 months | 12 months trading | Min. turnover £240k`,
   },
   {
     institution: "Swishfund",
     email: "justin.parr@swishfund.co.uk",
-    notes: `Unsecured BL (loans >£50k) | £10k–£500k | 10% annual turnover | 0.80%–2.33% pm | 3–24 months | 12 months trading | Min. turnover £100k | Open banking required | Contact: justin.parr@swishfund.co.uk`,
+    notes: `Unsecured business loan (loans >£50k) | £10k–£500k | 10% annual turnover | 0.80%–2.33% pm | 3–24 months | 12 months trading | Min. turnover £100k | Open banking required | Contact: justin.parr@swishfund.co.uk`,
   },
   {
     institution: "Momenta",
     email: null,
-    notes: `Unsecured BL | £50k–£250k | 25% annual turnover | 12.5%–22% | 6–60 months | 12 months trading | Min. turnover £350k`,
+    notes: `Unsecured business loan | £50k–£250k | 25% annual turnover | 12.5%–22% | 6–60 months | 12 months trading | Min. turnover £350k`,
   },
   {
     institution: "Got Capital",
     email: null,
-    notes: `Unsecured BL | £2k–£200k | Factor rate 1.45–1.5 | 4–7 months | 3 months trading | Min. turnover £60k | Open banking required | Refuses: financial lending, legal sector, other brokers`,
+    notes: `Unsecured business loan | £2k–£200k | Factor rate 1.45–1.5 | 4–7 months | 3 months trading | Min. turnover £60k | Open banking required | Refuses: financial lending, legal sector, other brokers`,
   },
   {
     institution: "Iwoca",
     email: "brokers@iwoca.co.uk",
-    notes: `Unsecured BL | £1k–£1m | 10% annual turnover | 1.10%–5.95% pm | 1–60 months | No min. trading | Refuses: active strikeoff, PayPal-only, adult, firearms, gambling, vehicle sales, jewellery | Contact: brokers@iwoca.co.uk`,
+    notes: `Unsecured business loan | £1k–£1m | 10% annual turnover | 1.10%–5.95% pm | 1–60 months | No min. trading | Refuses: active strikeoff, PayPal-only, adult, firearms, gambling, vehicle sales, jewellery | Contact: brokers@iwoca.co.uk`,
   },
   {
     institution: "Funding Circle",
     email: null,
-    notes: `Unsecured BL (loans >£50k) | £10k–£750k | 40% annual turnover | 0.80%–5.75% pm | 12–72 months | 12 months trading (24 for construction) | Min. turnover £16,700 | Max amount 40% of latest filed turnover`,
+    notes: `Unsecured business loan (loans >£50k) | £10k–£750k | 40% annual turnover | 0.80%–5.75% pm | 12–72 months | 12 months trading (24 for construction) | Min. turnover £16,700 | Max amount 40% of latest filed turnover`,
   },
   {
     institution: "Mycashline",
     email: "brokers@mycashline.co.uk",
-    notes: `Unsecured BL (loans >£25k) | £5k–£250k | 30% annual turnover | 3%–3.99% pm | 1–24 months | 12 months trading | Min. turnover £180k | UK-wide | Contact: brokers@mycashline.co.uk`,
+    notes: `Unsecured business loan (loans >£25k) | £5k–£250k | 30% annual turnover | 3%–3.99% pm | 1–24 months | 12 months trading | Min. turnover £180k | UK-wide | Contact: brokers@mycashline.co.uk`,
   },
   {
     institution: "Elect Capital",
     email: null,
-    notes: `Unsecured BL | £5k–£750k | Factor rate 1.25–1.55 | 6 months | 12 months trading | Min. turnover £300k | Comms increase with factor rate`,
+    notes: `Unsecured business loan | £5k–£750k | Factor rate 1.25–1.55 | 6 months | 12 months trading | Min. turnover £300k | Comms increase with factor rate`,
   },
   {
     institution: "Capify",
     email: "rtanner@capify.co.uk",
-    notes: `Unsecured BL (loans >£75k) | £20k–£750k | 75–125% monthly turnover | Factor rate 1.2–1.48 | 3–12 months | 12 months trading | Min. turnover £120k | UK-wide | Contact: rtanner@capify.co.uk / proposal@capify.co.uk`,
+    notes: `Unsecured business loan (loans >£75k) | £20k–£750k | 75–125% monthly turnover | Factor rate 1.2–1.48 | 3–12 months | 12 months trading | Min. turnover £120k | UK-wide | Contact: rtanner@capify.co.uk / proposal@capify.co.uk`,
   },
   {
     institution: "Rapital",
     email: null,
-    notes: `Unsecured BL | £5k–£250k | Factor rate 1.4–1.5 | 3–9 months | 3 months trading | Min. turnover £120k`,
+    notes: `Unsecured business loan | £5k–£250k | Factor rate 1.4–1.5 | 3–9 months | 3 months trading | Min. turnover £120k`,
   },
   {
     institution: "Cubefunder",
     email: null,
-    notes: `Unsecured BL (loans >£30k) | £5k–£100k | 3.50%–5% pm | 3–24 months | 3 months trading | Min. turnover £120k | Contact: Max`,
+    notes: `Unsecured business loan (loans >£30k) | £5k–£100k | 3.50%–5% pm | 3–24 months | 3 months trading | Min. turnover £120k | Contact: Max`,
   },
   {
     institution: "Nucleus",
     email: null,
-    notes: `Unsecured BL | £10k–£500k | 1.40%–2.49% pm | 3–72 months | 12 months trading | Min. turnover £50k | Open banking for loans >£250k | Refuses: residential care for elderly/disabled, gambling, legal sector`,
+    notes: `Unsecured business loan | £10k–£500k | 1.40%–2.49% pm | 3–72 months | 12 months trading | Min. turnover £50k | Open banking for loans >£250k | Refuses: residential care for elderly/disabled, gambling, legal sector`,
   },
   {
     institution: "Lending Crowd",
     email: null,
-    notes: `Unsecured BL | £75k–£500k (secured >£350k) | x1.1 min. debt service cover | 6.95%–19.2% | 6–60 months | 24 months trading`,
+    notes: `Unsecured business loan | £75k–£500k (secured >£350k) | x1.1 min. debt service cover | 6.95%–19.2% | 6–60 months | 24 months trading`,
   },
 ];
 
@@ -184,15 +185,45 @@ async function findExistingLenderContact(
   return (data?.length ?? 0) > 0;
 }
 
+function expandBlInNotes(notes: string): string {
+  return notes
+    .replaceAll("Unsecured business loan (BL) |", "Unsecured business loan |")
+    .replaceAll("Unsecured BL (", "Unsecured business loan (")
+    .replaceAll("Unsecured BL |", "Unsecured business loan |")
+    .replaceAll("unsecured BL above", "unsecured business loan above");
+}
+
 async function main(): Promise<void> {
   const { values } = parseArgs({
     args: process.argv.slice(2),
     options: {
       "dry-run": { type: "boolean", default: false },
       "patch-geography": { type: "boolean", default: false },
+      "patch-bl-notes": { type: "boolean", default: false },
     },
     strict: true,
   });
+
+  if (values["patch-bl-notes"] === true) {
+    const sb = createServiceSupabase();
+    const { data: rows, error: fetchErr } = await sb
+      .from("contacts")
+      .select("id, notes")
+      .eq("source", SOURCE_TAG);
+
+    if (fetchErr) throw fetchErr;
+
+    let updated = 0;
+    for (const row of rows ?? []) {
+      const next = expandBlInNotes(String(row.notes ?? ""));
+      if (next === row.notes) continue;
+      const { error } = await sb.from("contacts").update({ notes: next }).eq("id", row.id);
+      if (error) throw error;
+      updated += 1;
+    }
+    console.log(`Expanded BL → business loan in notes for ${updated} contact(s) (source=${SOURCE_TAG}).`);
+    return;
+  }
 
   if (values["patch-geography"] === true) {
     const sb = createServiceSupabase();

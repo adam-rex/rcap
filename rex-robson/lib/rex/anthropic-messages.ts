@@ -61,7 +61,7 @@ export async function completeAnthropicMessage(params: {
     const data = (await res.json()) as MessagesResponse;
 
     if (!res.ok) {
-      lastMessage = data.error?.message ?? res.statusText || lastMessage;
+      lastMessage = (data.error?.message ?? res.statusText) || lastMessage;
       if (isAnthropicOverloaded(res.status, data) && attempt < OVERLOAD_MAX_RETRIES) {
         await sleep(800 * 2 ** attempt);
         continue;
