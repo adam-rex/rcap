@@ -68,8 +68,7 @@ export function ChatComposer({
     setFiles((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
+  const runSubmit = useCallback(async () => {
     const q = value.trim();
     if ((!q && files.length === 0) || isBusy) return;
     const toSend = files;
@@ -77,6 +76,11 @@ export function ChatComposer({
     setFiles([]);
     setAttachmentError(null);
     await onSubmitSearch(q, toSend);
+  }, [value, files, isBusy, onSubmitSearch]);
+
+  function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    void runSubmit();
   }
 
   const canSubmit = !isBusy && (value.trim().length > 0 || files.length > 0);
@@ -115,7 +119,7 @@ export function ChatComposer({
         ) : null}
         <form
           onSubmit={handleSubmit}
-          className="flex items-center gap-2 rounded-2xl border border-charcoal/[0.08] bg-cream px-2 py-1.5 shadow-sm"
+          className="flex items-end gap-2 rounded-2xl border border-charcoal/[0.08] bg-cream px-2 py-1.5 shadow-sm"
         >
           <label
             htmlFor={fileInputId}
@@ -146,18 +150,26 @@ export function ChatComposer({
             <Mic className="size-5" strokeWidth={1.75} />
           </button>
           <label htmlFor="rex-chat-input" className="sr-only">
-            Search workspace
+            Message to Rex
           </label>
-          <input
+          <textarea
             id="rex-chat-input"
-            type="search"
             name="q"
             value={value}
             onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key !== "Enter") return;
+              if (e.nativeEvent.isComposing) return;
+              if (e.shiftKey) return;
+              e.preventDefault();
+              void runSubmit();
+            }}
             placeholder={placeholder}
             disabled={isBusy}
             autoComplete="off"
-            className="min-w-0 flex-1 bg-transparent py-2 text-[15px] text-charcoal placeholder:text-charcoal/40 outline-none disabled:opacity-60"
+            rows={1}
+            title="Enter to send · Shift+Enter for new line"
+            className="min-h-[2.75rem] max-h-40 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent py-2 text-[15px] leading-snug text-charcoal placeholder:text-charcoal/40 outline-none disabled:opacity-60"
           />
           <button
             type="submit"
