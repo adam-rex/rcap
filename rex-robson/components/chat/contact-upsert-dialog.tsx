@@ -100,6 +100,12 @@ export function ContactUpsertDialog({
     [],
   );
   const [orgsLoading, setOrgsLoading] = useState(false);
+  // Mirrors the contact's existing org so it stays selectable even when it's
+  // outside page 1 of /api/workspace/organisations (capped at 50 by created_at
+  // desc). Without this, editing such a contact silently nulls organisation_id.
+  const [linkedOrg, setLinkedOrg] = useState<WorkspaceOrganisationPageRow | null>(
+    null,
+  );
   const [newName, setNewName] = useState("");
   const [newOrganisationId, setNewOrganisationId] = useState("");
   const [inlineNewOrgName, setInlineNewOrgName] = useState("");
@@ -139,6 +145,7 @@ export function ContactUpsertDialog({
     setNewContactType("");
     setNewSector("");
     setNewOrganisationId("");
+    setLinkedOrg(null);
     setInlineNewOrgName("");
     setInlineNewOrgType("");
     setInlineNewOrgDescription("");
@@ -251,6 +258,8 @@ export function ContactUpsertDialog({
           contactType?: string | null;
           sector?: string | null;
           organisationId?: string | null;
+          organisationName?: string | null;
+          organisationType?: string | null;
           role?: string | null;
           geography?: string | null;
           phone?: string | null;
@@ -275,6 +284,16 @@ export function ContactUpsertDialog({
         setNewContactType(data.contactType ?? "");
         setNewSector(data.sector ?? "");
         setNewOrganisationId(data.organisationId ?? "");
+        setLinkedOrg(
+          data.organisationId && data.organisationName
+            ? {
+                id: data.organisationId,
+                name: data.organisationName,
+                type: data.organisationType ?? null,
+                description: null,
+              }
+            : null,
+        );
         setNewRole(data.role ?? "");
         setNewGeography(data.geography ?? "");
         setNewPhone(data.phone ?? "");
@@ -465,6 +484,9 @@ export function ContactUpsertDialog({
   const pdfDocuments = documents.filter((d) =>
     isPdfAttachment(d.filename, d.contentType),
   );
+  const nonPdfDocuments = documents.filter(
+    (d) => !isPdfAttachment(d.filename, d.contentType),
+  );
   const canEnrichFromSources =
     mode === "edit" &&
     editingId != null &&
@@ -653,6 +675,11 @@ export function ContactUpsertDialog({
 
   const formIdPrefix = mode === "edit" ? `edit-${editingId}` : "create";
 
+  const mergedOrgOptions =
+    linkedOrg && !orgOptions.some((o) => o.id === linkedOrg.id)
+      ? [linkedOrg, ...orgOptions]
+      : orgOptions;
+
   const formNode = (
     <form
       onSubmit={onSubmitContact}
@@ -771,7 +798,7 @@ export function ContactUpsertDialog({
               <option value={CONTACT_FORM_NEW_ORG_VALUE}>
                 Create new organisation…
               </option>
-              {orgOptions.map((o) => (
+              {mergedOrgOptions.map((o) => (
                 <option key={o.id} value={o.id}>
                   {o.name}
                 </option>
@@ -999,17 +1026,31 @@ export function ContactUpsertDialog({
               </p>
               {docsLoading ? (
                 <p className="text-xs text-charcoal-light/80">Loading…</p>
-              ) : pdfDocuments.length === 0 ? (
-                <p className="text-xs text-charcoal-light/80">
-                  No PDFs on this contact. Add PDFs from the contact profile, or
-                  enter a website URL above.
-                </p>
-              ) : (
+              ) : pdfDocuments.length > 0 ? (
                 <ul className="mt-1 list-inside list-disc text-xs text-charcoal">
                   {pdfDocuments.map((d) => (
                     <li key={d.id}>{d.filename}</li>
                   ))}
                 </ul>
+              ) : nonPdfDocuments.length > 0 ? (
+                <div className="space-y-1.5 text-xs text-charcoal-light/90">
+                  <p>
+                    Enrichment currently supports PDFs and websites only. To
+                    use {nonPdfDocuments.length === 1 ? "this file" : "these files"},
+                    re-upload {nonPdfDocuments.length === 1 ? "it" : "them"} as
+                    a PDF — or add a website URL above.
+                  </p>
+                  <ul className="list-inside list-disc text-charcoal/80">
+                    {nonPdfDocuments.map((d) => (
+                      <li key={d.id}>{d.filename}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <p className="text-xs text-charcoal-light/80">
+                  No PDFs on this contact. Add a PDF from the contact profile,
+                  or enter a website URL above.
+                </p>
               )}
               <button
                 type="button"
