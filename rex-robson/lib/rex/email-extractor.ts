@@ -2,6 +2,7 @@ import {
   buildEmailExtractSystemPrompt,
   buildEmailExtractUserContent,
 } from "@/lib/prompts/email-extract";
+import { sanitizeRolesList } from "@/lib/constants/contact-roles";
 import type { RexEmailExtractionKind } from "@/lib/data/workspace-emails.types";
 import { completeAnthropicMessage } from "./anthropic-messages";
 
@@ -79,11 +80,13 @@ function normaliseContact(raw: Record<string, unknown>): ExtractedRow | null {
     lowConfidence.push("contactType");
   }
   const orgName = asStr(payload.organisationName);
+  const roles = sanitizeRolesList(payload.roles);
   const cleanedPayload: Record<string, unknown> = {
     name,
     email: asStr(payload.email),
     phone: asStr(payload.phone),
     role: asStr(payload.role),
+    roles,
     geography: asStr(payload.geography),
     sector: asStr(payload.sector),
     contactType,

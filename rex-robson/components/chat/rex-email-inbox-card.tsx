@@ -3,11 +3,29 @@
 import { useCallback, useMemo, useState } from "react";
 import type { WorkspaceEmailExtractionListItem } from "@/lib/data/workspace-emails.types";
 import {
+  WORKSPACE_CONTACT_ROLE_LABEL,
+  WORKSPACE_CONTACT_ROLE_SLUGS,
+  isWorkspaceContactRoleSlug,
+  type WorkspaceContactRoleSlug,
+} from "@/lib/constants/contact-roles";
+import {
   WORKSPACE_FORM_BTN_PRIMARY,
   WORKSPACE_FORM_BTN_SECONDARY,
   WORKSPACE_FORM_INPUT_CLASS,
   WORKSPACE_FORM_LABEL_CLASS,
 } from "./workspace-create-dialog";
+
+function rolesFromPayload(p: Record<string, unknown>): WorkspaceContactRoleSlug[] {
+  const raw = p.roles;
+  if (!Array.isArray(raw)) return [];
+  const out: WorkspaceContactRoleSlug[] = [];
+  for (const item of raw) {
+    if (typeof item !== "string") continue;
+    const t = item.trim().toLowerCase();
+    if (t && isWorkspaceContactRoleSlug(t)) out.push(t);
+  }
+  return [...new Set(out)];
+}
 
 type RexEmailInboxCardProps = {
   emailId: string;
@@ -251,10 +269,13 @@ function ExtractionCard({
   const matchedId =
     typeof p.matchedContactId === "string" ? p.matchedContactId.trim() : "";
 
+  const suggestedRoles = useMemo(() => rolesFromPayload(p), [p]);
+
   const [draft, setDraft] = useState(() => ({
     name: String(p.name ?? x.title ?? ""),
     organisationName: String(p.organisationName ?? ""),
     role: String(p.role ?? ""),
+    roles: new Set<WorkspaceContactRoleSlug>(suggestedRoles),
     geography: String(p.geography ?? ""),
     notes: String(p.notes ?? ""),
     orgName: String(p.name ?? x.title ?? ""),
@@ -274,6 +295,7 @@ function ExtractionCard({
           name: draft.name.trim(),
           organisationName: draft.organisationName.trim() || undefined,
           role: draft.role.trim() || undefined,
+          roles: [...draft.roles],
           geography: draft.geography.trim() || undefined,
           notes: draft.notes.trim() || undefined,
         };
@@ -319,6 +341,19 @@ function ExtractionCard({
       {x.detail ? (
         <p className="mt-1 text-sm text-charcoal-light/90">{x.detail}</p>
       ) : null}
+      {x.kind === "contact" && !matchedId && draft.roles.size > 0 ? (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {[...draft.roles].map((slug) => (
+            <span
+              key={slug}
+              className="inline-flex items-center rounded-md border border-charcoal/12 bg-cream-light px-2 py-0.5 text-[10px] font-medium text-charcoal"
+              title="Role in Robson deals (suggested by Rex)"
+            >
+              {WORKSPACE_CONTACT_ROLE_LABEL[slug]}
+            </span>
+          ))}
+        </div>
+      ) : null}
 
       {isDone && x.status === "applied" ? (
         <p className="mt-2 text-xs text-charcoal-light">
@@ -362,6 +397,48 @@ function ExtractionCard({
                 value={draft.geography}
                 onChange={(v) => setDraft((d) => ({ ...d, geography: v }))}
               />
+              <fieldset>
+                <legend className={WORKSPACE_FORM_LABEL_CLASS}>
+                  Roles in Robson deals
+                </legend>
+                <p className="mt-0.5 text-[11px] text-charcoal-light/80">
+                  Rex pre-ticks roles inferred from the email. Confirm before
+                  saving.
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {WORKSPACE_CONTACT_ROLE_SLUGS.map((slug) => {
+                    const checked = draft.roles.has(slug);
+                    const id = `${x.id}-role-${slug}`;
+                    return (
+                      <label
+                        key={slug}
+                        htmlFor={id}
+                        className={`inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-1.5 text-xs transition-colors ${
+                          checked
+                            ? "border-charcoal bg-charcoal text-cream"
+                            : "border-charcoal/15 bg-cream text-charcoal-light hover:bg-cream-light"
+                        }`}
+                      >
+                        <input
+                          id={id}
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) =>
+                            setDraft((d) => {
+                              const next = new Set(d.roles);
+                              if (e.target.checked) next.add(slug);
+                              else next.delete(slug);
+                              return { ...d, roles: next };
+                            })
+                          }
+                          className="sr-only"
+                        />
+                        {WORKSPACE_CONTACT_ROLE_LABEL[slug]}
+                      </label>
+                    );
+                  })}
+                </div>
+              </fieldset>
               <div>
                 <label
                   htmlFor={`${x.id}-notes`}

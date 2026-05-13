@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { sanitizeRolesList } from "@/lib/constants/contact-roles";
 import {
   fetchWorkspaceTaskByIdWithClient,
   mapTaskRow,
@@ -66,6 +67,8 @@ export type CreatedContactRow = {
   contact_type: string | null;
   sector: string | null;
   role: string | null;
+  /** Multi-select role tags (always an array, may be empty). */
+  roles: string[];
   geography: string | null;
   phone: string | null;
   email: string | null;
@@ -81,6 +84,8 @@ export async function insertWorkspaceContact(
     sector: string;
     organisation_id: string | null;
     role: string | null;
+    /** Multi-select role tags (e.g. spv_investor, borrower). */
+    roles: string[];
     geography: string | null;
     phone: string | null;
     email: string | null;
@@ -92,30 +97,54 @@ export async function insertWorkspaceContact(
     internal_owner: string | null;
   },
 ): Promise<CreatedContactRow> {
-  const { data, error } = await client
-    .from("contacts")
-    .insert({
-      name: input.name,
-      contact_type: input.contact_type,
-      sector: input.sector,
-      organisation_id: input.organisation_id,
-      role: input.role,
-      geography: input.geography,
-      phone: input.phone,
-      email: input.email,
-      website_url: input.website_url,
-      notes: input.notes,
-      deal_types: input.deal_types,
-      min_deal_size: input.min_deal_size,
-      max_deal_size: input.max_deal_size,
-      internal_owner: input.internal_owner,
-    })
-    .select(
-      "id,name,contact_type,sector,role,geography,phone,email,organisation_id,internal_owner",
-    )
-    .single();
+  // If the roles column hasn't been migrated yet, the insert still succeeds
+  // by retrying without it. This keeps writes working on stale DBs.
+  const baseInsert = {
+    name: input.name,
+    contact_type: input.contact_type,
+    sector: input.sector,
+    organisation_id: input.organisation_id,
+    role: input.role,
+    geography: input.geography,
+    phone: input.phone,
+    email: input.email,
+    website_url: input.website_url,
+    notes: input.notes,
+    deal_types: input.deal_types,
+    min_deal_size: input.min_deal_size,
+    max_deal_size: input.max_deal_size,
+    internal_owner: input.internal_owner,
+  };
+  const fullInsert = { ...baseInsert, roles: input.roles };
+  const fullSelect =
+    "id,name,contact_type,sector,role,roles,geography,phone,email,organisation_id,internal_owner";
+  const fallbackSelect =
+    "id,name,contact_type,sector,role,geography,phone,email,organisation_id,internal_owner";
 
-  if (error) throw error;
+  let data: Record<string, unknown> | null = null;
+  {
+    const res = await client
+      .from("contacts")
+      .insert(fullInsert)
+      .select(fullSelect)
+      .single();
+    if (res.error) {
+      const code = (res.error as { code?: string }).code;
+      if (code === "42703" || code === "PGRST204") {
+        const retry = await client
+          .from("contacts")
+          .insert(baseInsert)
+          .select(fallbackSelect)
+          .single();
+        if (retry.error) throw retry.error;
+        data = retry.data as Record<string, unknown> | null;
+      } else {
+        throw res.error;
+      }
+    } else {
+      data = res.data as Record<string, unknown> | null;
+    }
+  }
   if (!data) throw new Error("Insert returned no row");
 
   return {
@@ -124,6 +153,7 @@ export async function insertWorkspaceContact(
     contact_type: data.contact_type == null ? null : String(data.contact_type),
     sector: data.sector == null ? null : String(data.sector),
     role: data.role == null ? null : String(data.role),
+    roles: sanitizeRolesList(data.roles),
     geography: data.geography == null ? null : String(data.geography),
     phone: data.phone == null ? null : String(data.phone),
     email: data.email == null ? null : String(data.email),
@@ -170,6 +200,8 @@ export type WorkspaceContactDetail = {
   organisation_name: string | null;
   organisation_type: string | null;
   role: string | null;
+  /** Multi-select role tags (always an array, may be empty). */
+  roles: string[];
   geography: string | null;
   phone: string | null;
   email: string | null;
@@ -221,6 +253,7 @@ function mapContactDetailFromRow(
     organisation_name: organisationName,
     organisation_type: organisationType,
     role: data.role == null ? null : String(data.role),
+    roles: sanitizeRolesList(data.roles),
     geography: data.geography == null ? null : String(data.geography),
     phone: data.phone == null ? null : String(data.phone),
     email: data.email == null ? null : String(data.email),
@@ -241,7 +274,7 @@ export async function fetchWorkspaceContactById(
   id: string,
 ): Promise<WorkspaceContactDetail | null> {
   const fullSelect =
-    "id,name,contact_type,sector,organisation_id,role,geography,phone,email,website_url,notes,deal_types,min_deal_size,max_deal_size,internal_owner,last_contact_date";
+    "id,name,contact_type,sector,organisation_id,role,roles,geography,phone,email,website_url,notes,deal_types,min_deal_size,max_deal_size,internal_owner,last_contact_date";
   const fallbackSelect =
     "id,name,contact_type,sector,organisation_id,role,geography,phone,email,notes,internal_owner";
 
@@ -386,6 +419,8 @@ export async function updateWorkspaceContact(
     sector: string;
     organisation_id: string | null;
     role: string | null;
+    /** Multi-select role tags (e.g. spv_investor, borrower). */
+    roles: string[];
     geography: string | null;
     phone: string | null;
     email: string | null;
@@ -397,31 +432,54 @@ export async function updateWorkspaceContact(
     internal_owner: string | null;
   },
 ): Promise<CreatedContactRow | null> {
-  const { data, error } = await client
-    .from("contacts")
-    .update({
-      name: input.name,
-      contact_type: input.contact_type,
-      sector: input.sector,
-      organisation_id: input.organisation_id,
-      role: input.role,
-      geography: input.geography,
-      phone: input.phone,
-      email: input.email,
-      website_url: input.website_url,
-      notes: input.notes,
-      deal_types: input.deal_types,
-      min_deal_size: input.min_deal_size,
-      max_deal_size: input.max_deal_size,
-      internal_owner: input.internal_owner,
-    })
-    .eq("id", id)
-    .select(
-      "id,name,contact_type,sector,role,geography,phone,email,organisation_id,internal_owner",
-    )
-    .maybeSingle();
+  const baseUpdate = {
+    name: input.name,
+    contact_type: input.contact_type,
+    sector: input.sector,
+    organisation_id: input.organisation_id,
+    role: input.role,
+    geography: input.geography,
+    phone: input.phone,
+    email: input.email,
+    website_url: input.website_url,
+    notes: input.notes,
+    deal_types: input.deal_types,
+    min_deal_size: input.min_deal_size,
+    max_deal_size: input.max_deal_size,
+    internal_owner: input.internal_owner,
+  };
+  const fullUpdate = { ...baseUpdate, roles: input.roles };
+  const fullSelect =
+    "id,name,contact_type,sector,role,roles,geography,phone,email,organisation_id,internal_owner";
+  const fallbackSelect =
+    "id,name,contact_type,sector,role,geography,phone,email,organisation_id,internal_owner";
 
-  if (error) throw error;
+  let data: Record<string, unknown> | null = null;
+  {
+    const res = await client
+      .from("contacts")
+      .update(fullUpdate)
+      .eq("id", id)
+      .select(fullSelect)
+      .maybeSingle();
+    if (res.error) {
+      const code = (res.error as { code?: string }).code;
+      if (code === "42703" || code === "PGRST204") {
+        const retry = await client
+          .from("contacts")
+          .update(baseUpdate)
+          .eq("id", id)
+          .select(fallbackSelect)
+          .maybeSingle();
+        if (retry.error) throw retry.error;
+        data = retry.data as Record<string, unknown> | null;
+      } else {
+        throw res.error;
+      }
+    } else {
+      data = res.data as Record<string, unknown> | null;
+    }
+  }
   if (!data) return null;
 
   return {
@@ -430,6 +488,7 @@ export async function updateWorkspaceContact(
     contact_type: data.contact_type == null ? null : String(data.contact_type),
     sector: data.sector == null ? null : String(data.sector),
     role: data.role == null ? null : String(data.role),
+    roles: sanitizeRolesList(data.roles),
     geography: data.geography == null ? null : String(data.geography),
     phone: data.phone == null ? null : String(data.phone),
     email: data.email == null ? null : String(data.email),

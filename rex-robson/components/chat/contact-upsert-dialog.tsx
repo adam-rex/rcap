@@ -10,6 +10,12 @@ import {
   INTERNAL_CONTACT_OWNERS,
   isInternalContactOwner,
 } from "@/lib/constants/internal-contact-owners";
+import {
+  WORKSPACE_CONTACT_ROLE_LABEL,
+  WORKSPACE_CONTACT_ROLE_SLUGS,
+  isWorkspaceContactRoleSlug,
+  type WorkspaceContactRoleSlug,
+} from "@/lib/constants/contact-roles";
 import type { WorkspaceContactPageRow } from "@/lib/data/workspace-contacts.types";
 import {
   WORKSPACE_FORM_BTN_PRIMARY,
@@ -113,6 +119,9 @@ export function ContactUpsertDialog({
   const [inlineNewOrgDescription, setInlineNewOrgDescription] = useState("");
   const [newContactType, setNewContactType] = useState("");
   const [newSector, setNewSector] = useState("");
+  const [newRoles, setNewRoles] = useState<Set<WorkspaceContactRoleSlug>>(
+    () => new Set(),
+  );
   const [newRole, setNewRole] = useState("");
   const [newGeography, setNewGeography] = useState("");
   const [newPhone, setNewPhone] = useState("");
@@ -144,6 +153,7 @@ export function ContactUpsertDialog({
     setNewName("");
     setNewContactType("");
     setNewSector("");
+    setNewRoles(new Set());
     setNewOrganisationId("");
     setLinkedOrg(null);
     setInlineNewOrgName("");
@@ -261,6 +271,7 @@ export function ContactUpsertDialog({
           organisationName?: string | null;
           organisationType?: string | null;
           role?: string | null;
+          roles?: string[] | null;
           geography?: string | null;
           phone?: string | null;
           email?: string | null;
@@ -295,6 +306,11 @@ export function ContactUpsertDialog({
             : null,
         );
         setNewRole(data.role ?? "");
+        setNewRoles(
+          new Set(
+            (data.roles ?? []).filter(isWorkspaceContactRoleSlug),
+          ),
+        );
         setNewGeography(data.geography ?? "");
         setNewPhone(data.phone ?? "");
         setNewEmail(data.email ?? "");
@@ -439,6 +455,7 @@ export function ContactUpsertDialog({
       sector: newSector,
       organisationId,
       role: newRole.trim() === "" ? null : newRole.trim(),
+      roles: [...newRoles],
       geography: newGeography.trim() === "" ? null : newGeography.trim(),
       phone: newPhone.trim() === "" ? null : newPhone.trim(),
       email: newEmail.trim() === "" ? null : newEmail.trim(),
@@ -610,6 +627,7 @@ export function ContactUpsertDialog({
         sector,
         organisationId,
         role: role.trim() === "" ? null : role.trim(),
+        roles: [...newRoles],
         geography: geography.trim() === "" ? null : geography.trim(),
         phone: newPhone.trim() === "" ? null : newPhone.trim(),
         email: newEmail.trim() === "" ? null : newEmail.trim(),
@@ -747,6 +765,48 @@ export function ContactUpsertDialog({
               placeholder="e.g. Fintech"
             />
           </div>
+          <fieldset>
+            <legend className={WORKSPACE_FORM_LABEL_CLASS}>
+              Roles in Robson deals
+            </legend>
+            <p className="mt-0.5 text-[11px] text-charcoal-light/80">
+              Tag what this contact does on our deals — distinct from their
+              contact type.
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {WORKSPACE_CONTACT_ROLE_SLUGS.map((slug) => {
+                const checked = newRoles.has(slug);
+                const id = `cu-role-${slug}-${formIdPrefix}`;
+                return (
+                  <label
+                    key={slug}
+                    htmlFor={id}
+                    className={`inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-1.5 text-xs transition-colors ${
+                      checked
+                        ? "border-charcoal bg-charcoal text-cream"
+                        : "border-charcoal/15 bg-cream text-charcoal-light hover:bg-cream-light"
+                    }`}
+                  >
+                    <input
+                      id={id}
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(e) =>
+                        setNewRoles((prev) => {
+                          const next = new Set(prev);
+                          if (e.target.checked) next.add(slug);
+                          else next.delete(slug);
+                          return next;
+                        })
+                      }
+                      className="sr-only"
+                    />
+                    {WORKSPACE_CONTACT_ROLE_LABEL[slug]}
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
           <div>
             <label
               htmlFor={`cu-owner-${formIdPrefix}`}

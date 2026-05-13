@@ -14,6 +14,11 @@ import {
   INTERNAL_CONTACT_OWNERS,
   isInternalContactOwner,
 } from "@/lib/constants/internal-contact-owners";
+import {
+  WORKSPACE_CONTACT_ROLE_SLUGS,
+  isWorkspaceContactRoleSlug,
+  type WorkspaceContactRoleSlug,
+} from "@/lib/constants/contact-roles";
 
 export type OrganisationUpsertBody = {
   name: string;
@@ -48,6 +53,8 @@ export type ContactUpsertBody = {
   sector: string;
   organisationId: string | null;
   role: string | null;
+  /** Multi-select role tags (e.g. spv_investor, borrower); always an array, may be empty. */
+  roles: WorkspaceContactRoleSlug[];
   geography: string | null;
   phone: string | null;
   email: string | null;
@@ -92,6 +99,37 @@ export function parseContactUpsertBody(
   if (!minDealSize.ok) return minDealSize;
   const maxDealSize = parseOptionalNumber(body, "maxDealSize");
   if (!maxDealSize.ok) return maxDealSize;
+
+  // roles (multi-select tag list). Missing key → []; null treated as [].
+  const rolesRaw = body["roles"];
+  const roles: WorkspaceContactRoleSlug[] = [];
+  if (rolesRaw != null) {
+    if (!Array.isArray(rolesRaw)) {
+      return { ok: false, error: "roles must be an array of strings." };
+    }
+    if (rolesRaw.length > 16) {
+      return { ok: false, error: "roles must have at most 16 items." };
+    }
+    const seen = new Set<string>();
+    for (const item of rolesRaw) {
+      if (typeof item !== "string") {
+        return { ok: false, error: "roles items must be strings." };
+      }
+      const t = item.trim().toLowerCase();
+      if (t === "") continue;
+      if (!isWorkspaceContactRoleSlug(t)) {
+        return {
+          ok: false,
+          error: `roles must be one of: ${WORKSPACE_CONTACT_ROLE_SLUGS.join(", ")}.`,
+        };
+      }
+      if (!seen.has(t)) {
+        seen.add(t);
+        roles.push(t);
+      }
+    }
+  }
+
   const internalOwnerRaw = body["internalOwner"];
   let internalOwner: string | null = null;
   if (internalOwnerRaw != null) {
@@ -117,6 +155,7 @@ export function parseContactUpsertBody(
       sector: sector.value,
       organisationId: organisationId.value,
       role: role.value,
+      roles,
       geography: geography.value,
       phone: phone.value,
       email: email.value,

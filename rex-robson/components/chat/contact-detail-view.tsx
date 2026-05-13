@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   Download,
   FileText,
+  Layers,
   MessageSquare,
   Pencil,
   Plus,
@@ -20,6 +21,10 @@ import {
   INTERNAL_CONTACT_OWNERS,
   isInternalContactOwner,
 } from "@/lib/constants/internal-contact-owners";
+import {
+  WORKSPACE_CONTACT_ROLE_LABEL,
+  isWorkspaceContactRoleSlug,
+} from "@/lib/constants/contact-roles";
 import { HOME_CONTACTS_HREF } from "@/components/chat/chat-nav-config";
 import {
   WORKSPACE_FORM_BTN_PRIMARY,
@@ -33,6 +38,8 @@ type ContactDetail = {
   websiteUrl: string | null;
   notes: string | null;
   organisationId: string | null;
+  /** Multi-select role tags (always an array, may be empty). */
+  roles: string[];
 };
 
 type ContactDocument = {
@@ -185,6 +192,7 @@ export function ContactDetailView({
           websiteUrl: prefetchedFields.websiteUrl ?? null,
           notes: prefetchedFields.notes,
           organisationId: contact.organisation_id,
+          roles: contact.roles ?? [],
         }
       : null,
   );
@@ -403,6 +411,7 @@ export function ContactDetailView({
           websiteUrl?: string | null;
           notes?: string | null;
           organisationId?: string | null;
+          roles?: string[] | null;
           error?: string;
         };
         if (cancelled) return;
@@ -417,6 +426,9 @@ export function ContactDetailView({
           websiteUrl: data.websiteUrl ?? null,
           notes: data.notes ?? null,
           organisationId: data.organisationId ?? null,
+          roles: Array.isArray(data.roles)
+            ? data.roles.filter(isWorkspaceContactRoleSlug)
+            : [],
         });
         setNotesDraft(data.notes ?? "");
         setNotesDirty(false);
@@ -466,6 +478,7 @@ export function ContactDetailView({
           sector: contact.sector ?? "",
           organisationId: contact.organisation_id,
           role: contact.role,
+          roles: detail?.roles ?? contact.roles ?? [],
           geography: contact.geography,
           phone: detail?.phone ?? null,
           email: detail?.email ?? null,
@@ -549,6 +562,11 @@ export function ContactDetailView({
   const contactTypeTrimmed = (contact.contact_type ?? "").trim();
   const typeBadge =
     contactTypeTrimmed.length > 0 ? contactTypeTrimmed : "Not set";
+
+  // Render roles from the freshest source available, filtered to known slugs.
+  const roleSlugs = (detail?.roles ?? contact.roles ?? []).filter(
+    isWorkspaceContactRoleSlug,
+  );
 
   const shellClass = isPage
     ? "min-h-dvh w-full max-w-[100%] overflow-x-hidden bg-cream pb-10 pt-[env(safe-area-inset-top,0px)]"
@@ -635,6 +653,19 @@ export function ContactDetailView({
                   <Tag className="size-3 shrink-0 text-charcoal/65" aria-hidden />
                   {typeBadge}
                 </span>
+                {roleSlugs.map((slug) => (
+                  <span
+                    key={slug}
+                    className="inline-flex items-center gap-1 rounded-md border border-charcoal/12 bg-cream-light px-2 py-0.5 text-[11px] font-medium text-charcoal shadow-[0_1px_0_rgba(10,10,10,0.04)]"
+                    title="Role in Robson deals"
+                  >
+                    <Layers
+                      className="size-3 shrink-0 text-charcoal/65"
+                      aria-hidden
+                    />
+                    {WORKSPACE_CONTACT_ROLE_LABEL[slug]}
+                  </span>
+                ))}
               </div>
               {subline ? (
                 <p className="mt-0.5 line-clamp-2 text-xs text-charcoal-light/90">

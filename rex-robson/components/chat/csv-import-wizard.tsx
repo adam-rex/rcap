@@ -23,6 +23,7 @@ const REX_TARGETS = [
   { id: "contact_name", label: "Contact name" },
   { id: "organisation", label: "Organisation" },
   { id: "role", label: "Role" },
+  { id: "roles_csv", label: "Roles (SPV investor / borrower)" },
   {
     id: "notes_match_prefs",
     label: "Rex will extract match prefs from this",
@@ -78,7 +79,10 @@ function guessTarget(header: string): RexTargetId {
   if (/company|org|organisation|organization|firm|employer|business/.test(h)) {
     return "organisation";
   }
-  if (/title|role|job|position/.test(h)) {
+  if (/\broles?\b|\btags?\b|spv|borrower|investor/.test(h)) {
+    return "roles_csv";
+  }
+  if (/title|\brole\b|job|position/.test(h)) {
     return "role";
   }
   if (/note|comment|memo|description|details/.test(h)) {

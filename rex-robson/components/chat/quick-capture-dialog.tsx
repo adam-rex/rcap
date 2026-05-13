@@ -21,6 +21,12 @@ import {
   type FormEvent,
 } from "react";
 import { INTERNAL_CONTACT_OWNERS } from "@/lib/constants/internal-contact-owners";
+import {
+  WORKSPACE_CONTACT_ROLE_LABEL,
+  WORKSPACE_CONTACT_ROLE_SLUGS,
+  isWorkspaceContactRoleSlug,
+  type WorkspaceContactRoleSlug,
+} from "@/lib/constants/contact-roles";
 import type { WorkspaceOrganisationPageRow } from "@/lib/data/workspace-organisations-page.types";
 import { WORKSPACE_ORGANISATIONS_PAGE_SIZE_MAX } from "@/lib/data/workspace-organisations-page.types";
 import type { QuickCaptureDraft } from "@/lib/prompts/quick-capture";
@@ -106,6 +112,8 @@ type ReviewForm = {
   inlineOrgType: string;
   inlineOrgDescription: string;
   role: string;
+  /** Multi-select role tags suggested by Rex; pre-ticked, user can untick. */
+  roles: Set<WorkspaceContactRoleSlug>;
   geography: string;
   phone: string;
   email: string;
@@ -125,6 +133,7 @@ function emptyForm(): ReviewForm {
     inlineOrgType: "",
     inlineOrgDescription: "",
     role: "",
+    roles: new Set(),
     geography: "",
     phone: "",
     email: "",
@@ -305,6 +314,9 @@ export function QuickCaptureDialog({
         inlineOrgType: "",
         inlineOrgDescription: "",
         role: draft.role,
+        roles: new Set(
+          (draft.roles ?? []).filter(isWorkspaceContactRoleSlug),
+        ),
         geography: draft.geography,
         phone: draft.phone,
         email: draft.email,
@@ -736,6 +748,7 @@ export function QuickCaptureDialog({
             sector: form.sector.trim(),
             organisationId,
             role: form.role.trim() === "" ? null : form.role.trim(),
+            roles: [...form.roles],
             geography:
               form.geography.trim() === "" ? null : form.geography.trim(),
             phone: form.phone.trim() === "" ? null : form.phone.trim(),
@@ -1500,6 +1513,49 @@ function ReviewStep({
           ))}
         </select>
       </div>
+
+      <fieldset>
+        <legend className={WORKSPACE_FORM_LABEL_CLASS}>
+          Roles in Robson deals{lowConfBadge("roles")}
+        </legend>
+        <p className="mt-0.5 text-[11px] text-charcoal-light/80">
+          Tag what this contact does on our deals — distinct from their
+          contact type. Rex pre-ticks roles it inferred from your note.
+        </p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {WORKSPACE_CONTACT_ROLE_SLUGS.map((slug) => {
+            const checked = form.roles.has(slug);
+            const id = `qc-role-${slug}`;
+            return (
+              <label
+                key={slug}
+                htmlFor={id}
+                className={`inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-1.5 text-xs transition-colors ${
+                  checked
+                    ? "border-charcoal bg-charcoal text-cream"
+                    : "border-charcoal/15 bg-cream text-charcoal-light hover:bg-cream-light"
+                }`}
+              >
+                <input
+                  id={id}
+                  type="checkbox"
+                  checked={checked}
+                  onChange={(e) =>
+                    setForm((p) => {
+                      const next = new Set(p.roles);
+                      if (e.target.checked) next.add(slug);
+                      else next.delete(slug);
+                      return { ...p, roles: next };
+                    })
+                  }
+                  className="sr-only"
+                />
+                {WORKSPACE_CONTACT_ROLE_LABEL[slug]}
+              </label>
+            );
+          })}
+        </div>
+      </fieldset>
 
       <div>
         <label htmlFor="qc-sector" className={WORKSPACE_FORM_LABEL_CLASS}>

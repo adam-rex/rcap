@@ -3,6 +3,7 @@ import { parseContactUpsertBody } from "@/lib/api/workspace-entity-bodies";
 import { readJsonObject } from "@/lib/api/workspace-post-parse";
 import { sanitizeWorkspaceListSearch } from "@/lib/data/workspace-search-sanitize";
 import { parseSectorsQuery } from "@/lib/constants/sectors";
+import { parseRolesQuery } from "@/lib/constants/contact-roles";
 import {
   getWorkspaceContactsPage,
   WORKSPACE_CONTACTS_PAGE_SIZE_DEFAULT,
@@ -32,6 +33,7 @@ export async function POST(req: Request) {
       sector: fields.value.sector,
       organisation_id: fields.value.organisationId,
       role: fields.value.role,
+      roles: fields.value.roles,
       geography: fields.value.geography,
       phone: fields.value.phone,
       email: fields.value.email,
@@ -72,6 +74,7 @@ export async function GET(req: Request) {
     url.searchParams.get("contact_type") ??
     "";
   const sectorsRaw = url.searchParams.get("sectors") ?? "";
+  const rolesRaw = url.searchParams.get("roles") ?? "";
   const pageRaw = url.searchParams.get("page");
   const sizeRaw = url.searchParams.get("pageSize") ?? url.searchParams.get("limit");
 
@@ -99,6 +102,7 @@ export async function GET(req: Request) {
   const organisationType = sanitizeWorkspaceListSearch(organisationTypeRaw);
   const contactType = sanitizeWorkspaceListSearch(contactTypeRaw);
   const sectors = parseSectorsQuery(sectorsRaw);
+  const roles = parseRolesQuery(rolesRaw);
 
   try {
     const result = await getWorkspaceContactsPage({
@@ -109,6 +113,7 @@ export async function GET(req: Request) {
       organisationType,
       contactType,
       sectors,
+      roles,
     });
     return NextResponse.json(result);
   } catch (e) {

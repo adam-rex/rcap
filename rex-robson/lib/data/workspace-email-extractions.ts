@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { sanitizeRolesList } from "@/lib/constants/contact-roles";
 import type { RexEmailExtractionKind } from "@/lib/data/workspace-emails.types";
 import {
   insertWorkspaceContact,
@@ -188,6 +189,7 @@ export async function applyRexEmailExtraction(
           sector: optStr(p.sector) ?? "Other",
           organisation_id: organisationId,
           role: optStr(p.role),
+          roles: sanitizeRolesList(p.roles),
           geography: optStr(p.geography),
           phone: optStr(p.phone),
           email: optStr(p.email),

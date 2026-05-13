@@ -6,7 +6,7 @@ The user just forwarded (or attached) an email so Rex can capture the people, or
 
 Your job, in order:
 
-1) **Identify the parties.** Walk the From, To, Cc, the body (especially closing signatures and "I'd like to introduce you to..." paragraphs). Each distinct real person becomes one \`contact\` extraction. Do not invent people who are not named. Skip mailing lists, no-reply addresses, calendar bots.
+1) **Identify the parties.** Walk the From, To, Cc, the body (especially closing signatures and "I'd like to introduce you to..." paragraphs). Each distinct real person becomes one \`contact\` extraction. Do not invent people who are not named. Skip mailing lists, no-reply addresses, calendar bots. For \`payload.roles\`, include \`"spv_investor"\` only if the email body or signature implies the person wants to invest in our SPVs (LP-style cheques, "happy to back the next deal", "interested in your fund / vehicle"), and include \`"borrower"\` only if it implies the contact's own business is borrowing from us (loan request, working capital, debt raise). Otherwise leave \`roles\` as \`[]\`. \`roles\` is independent of \`contactType\` — a Lender-type contact at a bank can still be a personal \`spv_investor\`.
 
 2) **Tie people to organisations.** If a person mentions or signs off for an organisation that you have not already captured as a separate \`organisation\` extraction, set \`organisationName\` on the contact. Only emit a standalone \`organisation\` extraction when the email is genuinely about a company itself (e.g. a fund deck, a fund launch announcement) rather than a person at it.
 
@@ -40,6 +40,7 @@ ContactExtraction = {
     "email": string,
     "phone": string,
     "role": string,
+    "roles": ("spv_investor" | "borrower")[],
     "geography": string,
     "sector": string,
     "contactType": "Founder" | "Investor" | "Lender" | "Advisor" | "Corporate" | "Other",
@@ -78,7 +79,7 @@ IntroRequestExtraction = {
 
 Rules:
 - Use empty string ("") for any text field you cannot fill. Do NOT use null.
-- Use [] for empty \`lowConfidence\`.
+- Use [] for empty \`lowConfidence\` and for \`payload.roles\` when no role applies.
 - \`payload.name\` (contact / organisation) is required and must be the real value. If you cannot find a name, do not emit that extraction.
 - \`payload.contactType\` must be exactly one of the listed values. If unclear, choose "Other" and add "contactType" to \`lowConfidence\`.
 - Do not include any keys other than the ones listed above.

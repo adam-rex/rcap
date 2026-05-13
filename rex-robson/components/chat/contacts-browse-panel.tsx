@@ -19,6 +19,13 @@ import {
   type WorkspaceSectorSlug,
 } from "@/lib/constants/sectors";
 import {
+  WORKSPACE_CONTACT_ROLE_LABEL,
+  WORKSPACE_CONTACT_ROLE_SLUGS,
+  formatRolesQuery,
+  parseRolesQuery,
+  type WorkspaceContactRoleSlug,
+} from "@/lib/constants/contact-roles";
+import {
   WORKSPACE_CONTACTS_PAGE_SIZE_DEFAULT,
   type WorkspaceContactPageRow,
 } from "@/lib/data/workspace-contacts.types";
@@ -112,14 +119,19 @@ function ContactsBrowsePanelInner({
   const [formOpen, setFormOpen] = useState(false);
   const [typeFiltersOpen, setTypeFiltersOpen] = useState(false);
   const [industryFiltersOpen, setIndustryFiltersOpen] = useState(false);
+  const [roleFiltersOpen, setRoleFiltersOpen] = useState(false);
   const [activeContactType, setActiveContactType] = useState("");
   const [activeSectors, setActiveSectors] = useState<Set<WorkspaceSectorSlug>>(
     () => new Set(),
   );
+  const [activeRoles, setActiveRoles] = useState<
+    Set<WorkspaceContactRoleSlug>
+  >(() => new Set());
 
   useLayoutEffect(() => {
     setActiveContactType(parseContactTypeFromUrl(searchParams.get("contactType")));
     setActiveSectors(new Set(parseSectorsQuery(searchParams.get("sectors"))));
+    setActiveRoles(new Set(parseRolesQuery(searchParams.get("roles"))));
   }, [searchParams]);
 
   useEffect(() => {
@@ -132,6 +144,9 @@ function ContactsBrowsePanelInner({
     const sq = formatSectorsQuery(activeSectors);
     if (sq) params.set("sectors", sq);
     else params.delete("sectors");
+    const rq = formatRolesQuery(activeRoles);
+    if (rq) params.set("roles", rq);
+    else params.delete("roles");
     const nextQs = params.toString();
     const curQs =
       typeof window !== "undefined" ? window.location.search.slice(1) : "";
@@ -139,11 +154,15 @@ function ContactsBrowsePanelInner({
       const href = nextQs.length > 0 ? `${pathname}?${nextQs}` : pathname;
       router.replace(href, { scroll: false });
     }
-  }, [activeContactType, activeSectors, pathname, router]);
+  }, [activeContactType, activeSectors, activeRoles, pathname, router]);
 
   const sectorsKey = useMemo(
     () => formatSectorsQuery(activeSectors),
     [activeSectors],
+  );
+  const rolesKey = useMemo(
+    () => formatRolesQuery(activeRoles),
+    [activeRoles],
   );
 
   useEffect(() => {
@@ -153,7 +172,7 @@ function ContactsBrowsePanelInner({
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedQuery, activeContactType, sectorsKey]);
+  }, [debouncedQuery, activeContactType, sectorsKey, rolesKey]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -170,6 +189,9 @@ function ContactsBrowsePanelInner({
     }
     if (sectorsKey !== "") {
       params.set("sectors", sectorsKey);
+    }
+    if (rolesKey !== "") {
+      params.set("roles", rolesKey);
     }
     try {
       const res = await fetch(`/api/workspace/contacts?${params.toString()}`);
@@ -192,7 +214,7 @@ function ContactsBrowsePanelInner({
     } finally {
       setLoading(false);
     }
-  }, [page, debouncedQuery, pageSize, activeContactType, sectorsKey]);
+  }, [page, debouncedQuery, pageSize, activeContactType, sectorsKey, rolesKey]);
 
   useEffect(() => {
     void load();
@@ -203,7 +225,10 @@ function ContactsBrowsePanelInner({
   const from = total === 0 ? 0 : (safePage - 1) * pageSize + 1;
   const to = Math.min(safePage * pageSize, total);
 
-  const hasFilters = activeContactType !== "" || activeSectors.size > 0;
+  const hasFilters =
+    activeContactType !== "" ||
+    activeSectors.size > 0 ||
+    activeRoles.size > 0;
 
   const filterSummary = useMemo(() => {
     const bits: string[] = [];
@@ -216,8 +241,16 @@ function ContactsBrowsePanelInner({
         bits.push(`${activeSectors.size} industries`);
       }
     }
+    if (activeRoles.size > 0) {
+      if (activeRoles.size === 1) {
+        const only = [...activeRoles][0];
+        bits.push(WORKSPACE_CONTACT_ROLE_LABEL[only]);
+      } else {
+        bits.push(`${activeRoles.size} roles`);
+      }
+    }
     return bits.length > 0 ? ` · ${bits.join(" · ")}` : "";
-  }, [activeContactType, activeSectors]);
+  }, [activeContactType, activeSectors, activeRoles]);
 
   useEffect(() => {
     if (page !== safePage && safePage >= 1) {
@@ -238,6 +271,15 @@ function ContactsBrowsePanelInner({
 
   const toggleSector = (slug: WorkspaceSectorSlug) => {
     setActiveSectors((prev) => {
+      const next = new Set(prev);
+      if (next.has(slug)) next.delete(slug);
+      else next.add(slug);
+      return next;
+    });
+  };
+
+  const toggleRole = (slug: WorkspaceContactRoleSlug) => {
+    setActiveRoles((prev) => {
       const next = new Set(prev);
       if (next.has(slug)) next.delete(slug);
       else next.add(slug);
@@ -298,6 +340,13 @@ function ContactsBrowsePanelInner({
           >
             {industryFiltersOpen ? "Hide industry filter" : "Filter by industry"}
           </button>
+          <button
+            type="button"
+            onClick={() => setRoleFiltersOpen((v) => !v)}
+            className="rounded-lg border border-charcoal/15 bg-cream px-3 py-1.5 text-xs font-medium text-charcoal transition-colors hover:bg-cream-light"
+          >
+            {roleFiltersOpen ? "Hide role filter" : "Filter by role"}
+          </button>
           {activeContactType ? (
             <button
               type="button"
@@ -314,6 +363,15 @@ function ContactsBrowsePanelInner({
               className="rounded-lg border border-charcoal/15 bg-cream-light px-3 py-1.5 text-xs text-charcoal-light"
             >
               Clear industries — {activeSectors.size} selected
+            </button>
+          ) : null}
+          {activeRoles.size > 0 ? (
+            <button
+              type="button"
+              onClick={() => setActiveRoles(new Set())}
+              className="rounded-lg border border-charcoal/15 bg-cream-light px-3 py-1.5 text-xs text-charcoal-light"
+            >
+              Clear roles — {activeRoles.size} selected
             </button>
           ) : null}
         </div>
@@ -377,6 +435,42 @@ function ContactsBrowsePanelInner({
                   }`}
                 >
                   {WORKSPACE_SECTOR_LABEL[slug]}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+        {roleFiltersOpen ? (
+          <div
+            className="mt-3 flex flex-wrap gap-2"
+            role="group"
+            aria-label="Roles in Robson deals"
+          >
+            <button
+              type="button"
+              onClick={() => setActiveRoles(new Set())}
+              className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                activeRoles.size === 0
+                  ? "border-charcoal bg-charcoal text-cream"
+                  : "border-charcoal/15 bg-cream text-charcoal-light hover:bg-cream-light"
+              }`}
+            >
+              All roles
+            </button>
+            {WORKSPACE_CONTACT_ROLE_SLUGS.map((slug) => {
+              const on = activeRoles.has(slug);
+              return (
+                <button
+                  key={slug}
+                  type="button"
+                  onClick={() => toggleRole(slug)}
+                  className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                    on
+                      ? "border-charcoal bg-charcoal text-cream"
+                      : "border-charcoal/15 bg-cream text-charcoal-light hover:bg-cream-light"
+                  }`}
+                >
+                  {WORKSPACE_CONTACT_ROLE_LABEL[slug]}
                 </button>
               );
             })}

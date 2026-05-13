@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { sanitizeRolesList } from "@/lib/constants/contact-roles";
 import type {
   WorkspaceContactPageRow,
   WorkspaceContactsPageResult,
@@ -50,6 +51,7 @@ function parseRpcPayload(data: unknown): WorkspaceContactsPageResult {
       contact_type: rpcText(x, "contact_type", "contactType"),
       sector: rpcText(x, "sector"),
       role: rpcText(x, "role"),
+      roles: sanitizeRolesList(x.roles),
       geography: rpcText(x, "geography"),
       last_contact_date:
         x.last_contact_date == null ? null : String(x.last_contact_date),
@@ -66,6 +68,7 @@ function parseRpcPayload(data: unknown): WorkspaceContactsPageResult {
 /**
  * Older `workspace_contacts_page` RPCs may omit newer columns. Merge from `contacts`
  * so the list UI stays correct without requiring every migration to be replayed.
+ * Tries successively narrower selects so missing-column DBs still merge what they can.
  */
 async function mergeContactListExtrasFromTable(
   client: SupabaseClient,
@@ -73,33 +76,27 @@ async function mergeContactListExtrasFromTable(
 ): Promise<WorkspaceContactPageRow[]> {
   if (rows.length === 0) return rows;
   const ids = rows.map((r) => r.id).filter((id) => id.length > 0);
+
+  const selects = [
+    "id,contact_type,sector,internal_owner,roles",
+    "id,contact_type,sector,internal_owner",
+    "id,contact_type,sector",
+  ];
+
   let data: Record<string, unknown>[] | null = null;
-  {
-    const res = await client
-      .from("contacts")
-      .select("id,contact_type,sector,internal_owner")
-      .in("id", ids);
-    if (res.error) {
-      const code = (res.error as { code?: string }).code;
-      if (code === "42703" || code === "PGRST204") {
-        const retry = await client
-          .from("contacts")
-          .select("id,contact_type,sector")
-          .in("id", ids);
-        if (retry.error) {
-          const c2 = (retry.error as { code?: string }).code;
-          if (c2 === "42703" || c2 === "PGRST204") return rows;
-          throw retry.error;
-        }
-        data = (retry.data ?? []) as Record<string, unknown>[];
-      } else {
-        throw res.error;
-      }
-    } else {
-      data = (res.data ?? []) as Record<string, unknown>[];
+  for (let i = 0; i < selects.length; i += 1) {
+    const sel = selects[i]!;
+    const res = await client.from("contacts").select(sel).in("id", ids);
+    if (!res.error) {
+      data = (res.data ?? []) as unknown as Record<string, unknown>[];
+      break;
     }
+    const code = (res.error as { code?: string }).code;
+    if (code !== "42703" && code !== "PGRST204") throw res.error;
+    if (i === selects.length - 1) return rows;
   }
   if (!data?.length) return rows;
+
   const byId = new Map(
     data.map((d) => {
       const rec = d;
@@ -114,6 +111,8 @@ async function mergeContactListExtrasFromTable(
           ),
           sector: firstNonEmptyText(sec == null ? null : String(sec)),
           internal_owner: firstNonEmptyText(io == null ? null : String(io)),
+          roles: sanitizeRolesList(rec.roles),
+          hasRoles: Object.prototype.hasOwnProperty.call(rec, "roles"),
         },
       ];
     }),
@@ -129,8 +128,26 @@ async function mergeContactListExtrasFromTable(
         extra.internal_owner,
         r.internal_owner,
       ),
+      // Prefer canonical roles from the contacts table when present (RPC may
+      // not have been bumped yet). Fall back to whatever the RPC returned.
+      roles: extra.hasRoles ? extra.roles : r.roles,
     };
   });
+}
+
+function isMissingRpcSignatureError(err: unknown): boolean {
+  if (err == null || typeof err !== "object") return false;
+  const e = err as { code?: string; message?: string };
+  // 42883 = undefined_function in Postgres (signature mismatch). PostgREST also
+  // surfaces this on RPC calls where the named arg list doesn't match a function.
+  if (e.code === "42883" || e.code === "PGRST202") return true;
+  const msg = (e.message ?? "").toLowerCase();
+  return (
+    msg.includes("workspace_contacts_page") &&
+    (msg.includes("does not exist") ||
+      msg.includes("no function matches") ||
+      msg.includes("could not find"))
+  );
 }
 
 export async function fetchWorkspaceContactsPageWithClient(
@@ -143,6 +160,7 @@ export async function fetchWorkspaceContactsPageWithClient(
     organisationType: string | null;
     contactType: string | null;
     sectors: string[];
+    roles: string[];
   },
 ): Promise<WorkspaceContactsPageResult> {
   const page = Math.max(1, Math.floor(params.page));
@@ -151,7 +169,7 @@ export async function fetchWorkspaceContactsPageWithClient(
     Math.max(1, Math.floor(params.pageSize)),
   );
 
-  const { data, error } = await client.rpc("workspace_contacts_page", {
+  const baseArgs = {
     p_search: params.search ?? "",
     p_page: page,
     p_page_size: pageSize,
@@ -159,15 +177,43 @@ export async function fetchWorkspaceContactsPageWithClient(
     p_organisation_type: params.organisationType ?? "",
     p_contact_type: params.contactType ?? "",
     p_sectors: params.sectors,
-  });
+  };
 
-  if (error) {
-    throw error;
+  let data: unknown = null;
+  let usedLegacyRpc = false;
+  {
+    const res = await client.rpc("workspace_contacts_page", {
+      ...baseArgs,
+      p_roles: params.roles,
+    });
+    if (res.error) {
+      if (isMissingRpcSignatureError(res.error)) {
+        const retry = await client.rpc("workspace_contacts_page", baseArgs);
+        if (retry.error) throw retry.error;
+        data = retry.data;
+        usedLegacyRpc = true;
+      } else {
+        throw res.error;
+      }
+    } else {
+      data = res.data;
+    }
   }
 
   const parsed = parseRpcPayload(data);
-  const rows = await mergeContactListExtrasFromTable(client, parsed.rows);
-  return { rows, total: parsed.total };
+  let rows = await mergeContactListExtrasFromTable(client, parsed.rows);
+
+  // If the RPC didn't filter by roles (legacy signature), apply OR semantics
+  // client-side so the user-facing filter still works on stale DBs.
+  let total = parsed.total;
+  if (usedLegacyRpc && params.roles.length > 0) {
+    const wanted = new Set(params.roles);
+    const filtered = rows.filter((r) => r.roles.some((x) => wanted.has(x)));
+    rows = filtered;
+    total = filtered.length;
+  }
+
+  return { rows, total };
 }
 
 /**
@@ -181,6 +227,7 @@ export async function getWorkspaceContactsPage(params: {
   organisationType: string | null;
   contactType: string | null;
   sectors: string[];
+  roles: string[];
 }): Promise<WorkspaceContactsPageResult> {
   const client = await createServerSupabaseClient();
   return fetchWorkspaceContactsPageWithClient(client, params);

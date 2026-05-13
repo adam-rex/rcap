@@ -16,6 +16,7 @@ type ContactApiRow = {
   organisationName?: string | null;
   organisationType?: string | null;
   role?: string | null;
+  roles?: string[] | null;
   geography?: string | null;
   phone?: string | null;
   email?: string | null;
@@ -33,6 +34,11 @@ function mapApiToPageRow(data: ContactApiRow): WorkspaceContactPageRow {
     contact_type: data.contactType ?? null,
     sector: data.sector ?? null,
     role: data.role ?? null,
+    roles: Array.isArray(data.roles)
+      ? data.roles.filter(
+          (r): r is string => typeof r === "string" && r.trim().length > 0,
+        )
+      : [],
     geography: data.geography ?? null,
     last_contact_date: data.lastContactDate ?? null,
     organisation_id: data.organisationId ?? null,
