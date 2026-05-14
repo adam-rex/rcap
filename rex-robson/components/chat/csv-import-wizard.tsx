@@ -9,6 +9,10 @@ import {
   type ReactNode,
 } from "react";
 import {
+  WORKSPACE_CONTACT_ROLE_LABEL,
+  WORKSPACE_CONTACT_ROLE_SLUGS,
+} from "@/lib/constants/contact-roles";
+import {
   WORKSPACE_FORM_BTN_PRIMARY,
   WORKSPACE_FORM_BTN_SECONDARY,
 } from "./workspace-create-dialog";
@@ -19,11 +23,41 @@ const LLM_SAMPLE_CHARS = 14_000;
 
 type StepId = "map" | "review" | "save";
 
+// Build the human-readable label and the header-matching keyword list from the
+// canonical role constants so we don't duplicate "Borrower" / "SPV Borrower"
+// strings in the wizard. Adding a new role slug automatically updates both.
+const ROLES_CSV_LABEL = `Roles (${WORKSPACE_CONTACT_ROLE_SLUGS.map(
+  (s) => WORKSPACE_CONTACT_ROLE_LABEL[s],
+).join(" / ")})`;
+
+const ROLE_HEADER_HINTS = (() => {
+  const out = new Set<string>();
+  for (const slug of WORKSPACE_CONTACT_ROLE_SLUGS) {
+    for (const word of slug.split("_")) {
+      if (word) out.add(word.toLowerCase());
+    }
+    for (const word of WORKSPACE_CONTACT_ROLE_LABEL[slug]
+      .toLowerCase()
+      .split(/\s+/)) {
+      if (word) out.add(word);
+    }
+  }
+  return [...out];
+})();
+
+// Matches "roles", "tags", and any word derived from a role slug/label
+// (e.g. "spv", "investor", "borrower"). Pluralises bare-word hints.
+const ROLE_HEADER_RE = new RegExp(
+  `\\broles?\\b|\\btags?\\b|${ROLE_HEADER_HINTS.map(
+    (w) => `\\b${w}s?\\b`,
+  ).join("|")}`,
+);
+
 const REX_TARGETS = [
   { id: "contact_name", label: "Contact name" },
   { id: "organisation", label: "Organisation" },
   { id: "role", label: "Role" },
-  { id: "roles_csv", label: "Roles (SPV investor / borrower)" },
+  { id: "roles_csv", label: ROLES_CSV_LABEL },
   {
     id: "notes_match_prefs",
     label: "Rex will extract match prefs from this",
@@ -79,7 +113,7 @@ function guessTarget(header: string): RexTargetId {
   if (/company|org|organisation|organization|firm|employer|business/.test(h)) {
     return "organisation";
   }
-  if (/\broles?\b|\btags?\b|spv|borrower|investor/.test(h)) {
+  if (ROLE_HEADER_RE.test(h)) {
     return "roles_csv";
   }
   if (/title|\brole\b|job|position/.test(h)) {

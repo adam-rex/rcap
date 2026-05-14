@@ -7,7 +7,7 @@ export type WorkspaceContactPageRow = {
   contact_type: string | null;
   sector: string | null;
   role: string | null;
-  /** Multi-select role tags (e.g. spv_investor, borrower). Always an array, may be empty. */
+  /** Multi-select role tags (e.g. spv_investor, spv_borrower). Always an array, may be empty. */
   roles: string[];
   geography: string | null;
   last_contact_date: string | null;

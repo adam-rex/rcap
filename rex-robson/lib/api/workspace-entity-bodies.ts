@@ -53,7 +53,7 @@ export type ContactUpsertBody = {
   sector: string;
   organisationId: string | null;
   role: string | null;
-  /** Multi-select role tags (e.g. spv_investor, borrower); always an array, may be empty. */
+  /** Multi-select role tags (e.g. spv_investor, spv_borrower); always an array, may be empty. */
   roles: WorkspaceContactRoleSlug[];
   geography: string | null;
   phone: string | null;

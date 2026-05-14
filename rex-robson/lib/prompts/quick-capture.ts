@@ -42,11 +42,11 @@ Rules:
   If you cannot tell, choose "Other" and include "contactType" in \`lowConfidence\`.
 
   Roles in Robson deals (\`roles\`) — multi-select, SEPARATE from \`contactType\`:
-  - \`roles\` is an array of slugs from this fixed list (zero or more, no duplicates): "spv_investor", "borrower".
+  - \`roles\` is an array of slugs from this fixed list (zero or more, no duplicates): "spv_investor", "spv_borrower".
   - A contact can have both, one, or neither; default \`[]\` when nothing in the input implies SPV investing or borrowing.
   - \`spv_investor\` — the person personally puts money into our SPVs / vehicles, writes LP-style cheques, or wants to back the next deal. Triggers: "wants to invest in SPVs", "happy to back the next deal", "putting in £500k", "writes LP cheques", "interested in our SPVs", "co-investor on the last deal".
-  - \`borrower\` — the contact (or the company they run/own) is borrowing money from us. Triggers: "looking for a £3M loan", "needs working capital", "raising debt for the business", "they want a bridge", "company is borrowing from us".
-  - These are about behaviour on our deals, not their job. An Investor-type \`contactType\` can also be a \`borrower\` if their own business is borrowing; a Lender-type institution employee can be a personal \`spv_investor\` if they put money into our SPVs on the side.
+  - \`spv_borrower\` — the contact (or the company they run/own) is borrowing money from us via one of our SPVs. Triggers: "looking for a £3M loan", "needs working capital", "raising debt for the business", "they want a bridge", "company is borrowing from us".
+  - These are about behaviour on our deals, not their job. An Investor-type \`contactType\` can also be an \`spv_borrower\` if their own business is borrowing; a Lender-type institution employee can be a personal \`spv_investor\` if they put money into our SPVs on the side.
   - If you guess a role from soft cues (rather than a literal phrase), include "roles" in \`lowConfidence\`.
 - \`notes\` should preserve the user's raw context verbatim-ish (what they said about the person, where they met, what the person is looking for). Keep it short — a few lines at most.
 - \`lowConfidence\` lists any field names you guessed or inferred vs. read literally. Empty array if everything was explicit.
@@ -66,7 +66,7 @@ The JSON object must use exactly these keys:
   "sector": string,
   "organisationName": string,
   "role": string,
-  "roles": ("spv_investor" | "borrower")[],
+  "roles": ("spv_investor" | "spv_borrower")[],
   "geography": string,
   "phone": string,
   "email": string,

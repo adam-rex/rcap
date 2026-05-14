@@ -84,7 +84,7 @@ export async function insertWorkspaceContact(
     sector: string;
     organisation_id: string | null;
     role: string | null;
-    /** Multi-select role tags (e.g. spv_investor, borrower). */
+    /** Multi-select role tags (e.g. spv_investor, spv_borrower). */
     roles: string[];
     geography: string | null;
     phone: string | null;
@@ -419,7 +419,7 @@ export async function updateWorkspaceContact(
     sector: string;
     organisation_id: string | null;
     role: string | null;
-    /** Multi-select role tags (e.g. spv_investor, borrower). */
+    /** Multi-select role tags (e.g. spv_investor, spv_borrower). */
     roles: string[];
     geography: string | null;
     phone: string | null;

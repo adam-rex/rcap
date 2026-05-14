@@ -3,10 +3,14 @@
  * Independent of `contacts.contact_type` — a contact may be both a corporate
  * Lender (institution) and a personal SPV investor, etc. Add new roles here.
  * Stored as `contacts.roles text[]` and filtered via array overlap.
+ *
+ * This file is the single source of truth for both the canonical slugs
+ * (DB / API / prompt-facing) and the human-readable display labels. Other
+ * modules should import from here rather than hardcoding either form.
  */
 export const WORKSPACE_CONTACT_ROLE_SLUGS = [
   "spv_investor",
-  "borrower",
+  "spv_borrower",
 ] as const;
 
 export type WorkspaceContactRoleSlug =
@@ -22,7 +26,7 @@ export const WORKSPACE_CONTACT_ROLE_LABEL: Record<
   string
 > = {
   spv_investor: "SPV Investor",
-  borrower: "Borrower",
+  spv_borrower: "SPV Borrower",
 };
 
 export function isWorkspaceContactRoleSlug(
